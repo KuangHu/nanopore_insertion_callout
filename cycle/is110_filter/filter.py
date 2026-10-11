@@ -308,7 +308,7 @@ class IS110Filter:
         if not domains_info:
             return
 
-        orfs = rec.get("orf_annotation", {}).get("orfs", [])
+        orfs = (rec.get("orf_annotation") or {}).get("orfs", [])
         coord_domains: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for domain_name in ("DEDD", "Tnp20"):
             for _prot_id, start, end, _strand in domains_info.get(domain_name, []):
