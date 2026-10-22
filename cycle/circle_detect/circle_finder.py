@@ -20,6 +20,8 @@ from typing import Optional
 
 import pysam
 
+from ..processes import run_checked_pipe
+
 from ..utils import find_fastq
 from .config import (
     DEFAULT_BOUNDARY_TOLERANCE,
@@ -213,6 +215,7 @@ class CircleFinder:
         """
         fastq = Path(fastq)
         output_bam = Path(output_bam)
+        pending_bam = output_bam.with_name(f".{output_bam.stem}.pending.bam")
 
         if output_bam.exists() and Path(str(output_bam) + ".bai").exists():
             logger.info(f"BAM exists: {output_bam}")
@@ -231,46 +234,25 @@ class CircleFinder:
             "samtools", "sort",
             "-@", str(self.threads),
             "-m", self.sort_memory,
-            "-o", str(output_bam),
+            "-o", str(pending_bam),
             "-",
         ]
 
         logger.info(f"Mapping {fastq.name} -> {output_bam.name}")
         try:
-            mm2_proc = subprocess.Popen(
-                mm2_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            run_checked_pipe(mm2_cmd, sort_cmd)
+            subprocess.run(
+                ["samtools", "index", str(pending_bam)],
+                capture_output=True, text=True, check=True,
             )
-            sort_proc = subprocess.Popen(
-                sort_cmd,
-                stdin=mm2_proc.stdout,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            mm2_proc.stdout.close()
-
-            sort_out, sort_err = sort_proc.communicate()
-            mm2_err = mm2_proc.stderr.read()
-            mm2_proc.stderr.close()
-            mm2_proc.wait()
-
-            if sort_proc.returncode != 0:
-                logger.error(
-                    f"samtools sort failed: {sort_err.decode().strip()}"
-                )
-                return None
-
+            pending_bam.replace(output_bam)
+            Path(str(pending_bam) + ".bai").replace(Path(str(output_bam) + ".bai"))
         except Exception as exc:
-            logger.error(f"Mapping pipeline failed: {exc}")
+            logger.error(f"Mapping pipeline failed: {exc}; {getattr(exc, 'stderr', '')}")
             return None
-
-        # Index the BAM
-        ret = subprocess.run(
-            ["samtools", "index", str(output_bam)],
-            capture_output=True, text=True,
-        )
-        if ret.returncode != 0:
-            logger.error(f"samtools index failed: {ret.stderr.strip()}")
-            return None
+        finally:
+            pending_bam.unlink(missing_ok=True)
+            Path(str(pending_bam) + ".bai").unlink(missing_ok=True)
 
         logger.info(f"  -> {output_bam} + .bai")
         return output_bam
@@ -331,8 +313,8 @@ class CircleFinder:
 
             # Soft-clip lengths from CIGAR
             cigar = read.cigartuples
-            left_clip = cigar[0][1] if cigar and cigar[0][0] in (4, 5) else 0
-            right_clip = cigar[-1][1] if cigar and cigar[-1][0] in (4, 5) else 0
+            left_clip = cigar[0][1] if cigar and cigar[0][0] == 4 else 0
+            right_clip = cigar[-1][1] if cigar and cigar[-1][0] == 4 else 0
 
             # The junction_map for a TH bait has one entry with position = N
             junction_pos = junctions[0]["position"]
@@ -340,9 +322,9 @@ class CircleFinder:
 
             detected_types: list[str] = []
 
-            # Tail-head: alignment spans the junction at N
-            if (ref_start <= junction_pos - min_overlap
-                    and ref_end >= junction_pos + min_overlap):
+            # Count query-aligned anchors and require a match block across the
+            # junction. A reference span through D/N is not junction evidence.
+            if self._has_junction_anchor(cigar, ref_start, junction_pos, min_overlap):
                 detected_types.append("tail_head")
 
             # Genome-head: left soft-clip is genomic, alignment starts
@@ -418,6 +400,32 @@ class CircleFinder:
             }
 
         return junction_reads, summary_by_uuid
+
+    @staticmethod
+    def _has_junction_anchor(cigar, ref_start, junction_pos, min_overlap):
+        """Require aligned bases on both sides and a gap-free junction itself.
+
+        Indels away from the junction may occur in noisy reads, but cannot
+        contribute bases to either anchor or stand in for a junction bridge.
+        """
+        ref_pos = ref_start
+        block_start = None
+        left_bases = right_bases = 0
+        bridged = False
+        for op, length in cigar or []:
+            if op in (0, 7, 8):  # consumes both reference and query
+                if block_start is None:
+                    block_start = ref_pos
+                end = ref_pos + length
+                left_bases += max(0, min(end, junction_pos) - ref_pos)
+                right_bases += max(0, end - max(ref_pos, junction_pos))
+                bridged |= block_start < junction_pos < end
+                ref_pos = end
+            else:
+                if op in (2, 3):  # deletion or reference skip
+                    ref_pos += length
+                block_start = None
+        return bridged and left_bases >= min_overlap and right_bases >= min_overlap
 
     # ------------------------------------------------------------------
     # Public API

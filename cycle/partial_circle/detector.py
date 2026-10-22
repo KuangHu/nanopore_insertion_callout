@@ -20,6 +20,8 @@ from typing import Optional
 
 import pysam
 
+from ..processes import run_checked_pipe
+
 from .config import (
     DEFAULT_BREAKPOINT_TOLERANCE,
     DEFAULT_MAX_CIRCLE_FRACTION,
@@ -209,6 +211,7 @@ class PartialCircleDetector:
         """
         fastq = Path(fastq)
         output_bam = Path(output_bam)
+        pending_bam = output_bam.with_name(f".{output_bam.stem}.pending.bam")
 
         if output_bam.exists():
             logger.info(f"Name-sorted BAM exists: {output_bam}")
@@ -227,37 +230,19 @@ class PartialCircleDetector:
             "-n",  # name-sorted for split-read grouping
             "-@", str(self.threads),
             "-m", self.sort_memory,
-            "-o", str(output_bam),
+            "-o", str(pending_bam),
             "-",
         ]
 
         logger.info(f"Mapping {fastq.name} -> {output_bam.name} (name-sorted)")
         try:
-            mm2_proc = subprocess.Popen(
-                mm2_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            )
-            sort_proc = subprocess.Popen(
-                sort_cmd,
-                stdin=mm2_proc.stdout,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            mm2_proc.stdout.close()
-
-            sort_out, sort_err = sort_proc.communicate()
-            mm2_err = mm2_proc.stderr.read()
-            mm2_proc.stderr.close()
-            mm2_proc.wait()
-
-            if sort_proc.returncode != 0:
-                logger.error(
-                    f"samtools sort failed: {sort_err.decode().strip()}"
-                )
-                return None
-
+            run_checked_pipe(mm2_cmd, sort_cmd)
+            pending_bam.replace(output_bam)
         except Exception as exc:
-            logger.error(f"Mapping pipeline failed: {exc}")
+            logger.error(f"Mapping pipeline failed: {exc}; {getattr(exc, 'stderr', '')}")
             return None
+        finally:
+            pending_bam.unlink(missing_ok=True)
 
         logger.info(f"  -> {output_bam}")
         return output_bam
@@ -510,7 +495,8 @@ class PartialCircleDetector:
 
         if not records:
             logger.warning(f"No IS records for {sample_id}, skipping")
-            return None
+            self._write_empty_outputs(sample_dir, sample_id)
+            return sample_dir
 
         ref_fasta = sample_dir / f"{sample_id}_is_ref.fa"
         ref_fasta, is_lengths = self._build_is_reference(records, ref_fasta)
@@ -519,7 +505,8 @@ class PartialCircleDetector:
             logger.warning(
                 f"No valid IS sequences for {sample_id} after filtering, skipping"
             )
-            return None
+            self._write_empty_outputs(sample_dir, sample_id)
+            return sample_dir
 
         is_id_set = set(is_lengths.keys())
         logger.info(

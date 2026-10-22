@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cycle.partial_circle import PartialCircleDetector
+from cycle.partial_circle_state import input_signature, is_complete, mark_complete
 
 
 def main():
@@ -93,6 +94,22 @@ def main():
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
+    parameters = {key: getattr(args, key) for key in (
+        "min_overlap", "min_circle_size", "max_circle_fraction",
+        "breakpoint_tolerance", "min_supporting_reads", "threads",
+    )}
+    signature = input_signature(args.is_records, args.fastq, parameters)
+    sample_dir = Path(args.output_dir) / args.sample_id
+    if is_complete(sample_dir, args.sample_id, signature):
+        logging.getLogger(__name__).info("Already complete: %s", args.sample_id)
+        return
+
+    # An empty directory or an old output is not a completion record. Rebuild
+    # intermediate caches after an interrupted run or an input/parameter change.
+    for name in ("complete.json", f"{args.sample_id}_is_ref.fa",
+                 f"{args.sample_id}.partial.nsorted.bam"):
+        (sample_dir / name).unlink(missing_ok=True)
+
     detector = PartialCircleDetector(
         output_dir=args.output_dir,
         min_overlap=args.min_overlap,
@@ -111,6 +128,7 @@ def main():
 
     log = logging.getLogger(__name__)
     if result:
+        mark_complete(result, args.sample_id, signature)
         log.info("Done — results at %s", result)
     else:
         log.warning("No output produced for %s", args.sample_id)

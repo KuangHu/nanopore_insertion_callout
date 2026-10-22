@@ -5,6 +5,7 @@ real BAM files or minimap2/samtools on PATH.
 """
 
 import unittest
+import tempfile
 from unittest.mock import MagicMock, patch
 
 # Patch shutil.which before importing CircleFinder so the constructor
@@ -15,8 +16,8 @@ with patch("shutil.which", return_value="/usr/bin/fake"):
 
 def _make_finder(**kwargs):
     """Create a CircleFinder with tools check bypassed."""
-    with patch("shutil.which", return_value="/usr/bin/fake"):
-        return CircleFinder(output_dir="/tmp/test_circle", **kwargs)
+    with tempfile.TemporaryDirectory() as output_dir, patch("shutil.which", return_value="/usr/bin/fake"):
+        return CircleFinder(output_dir=output_dir, **kwargs)
 
 
 def _mock_read(
@@ -85,6 +86,43 @@ class TestFindJunctionReads(unittest.TestCase):
         self.assertEqual(len(junction_reads), 1)
         self.assertEqual(junction_reads[0]["junction_type"], "tail_head")
         self.assertEqual(summary["is1"]["n_tail_head_reads"], 1)
+
+    def test_reference_gap_is_not_tail_head_support(self):
+        for gap_op in (2, 3):  # D and N consume reference but no query bases
+            with self.subTest(op=gap_op):
+                read = _mock_read('is1__th__j1000', 800, 1200,
+                                  [(0, 100), (gap_op, 200), (0, 100)])
+                _, summary = self._run([read])
+                self.assertEqual(summary['is1']['n_tail_head_reads'], 0)
+
+    def test_reference_span_does_not_replace_query_anchors(self):
+        read = _mock_read('is1__th__j1000', 800, 1200,
+                          [(0, 50), (2, 140), (0, 210)])
+        _, summary = self._run([read])
+        self.assertEqual(summary['is1']['n_tail_head_reads'], 0)
+
+    def test_adjacent_match_operators_form_one_anchor(self):
+        read = _mock_read('is1__th__j1000', 800, 1200,
+                          [(7, 150), (8, 10), (0, 240)])
+        _, summary = self._run([read])
+        self.assertEqual(summary['is1']['n_tail_head_reads'], 1)
+
+    def test_insertion_at_junction_is_not_contiguous_support(self):
+        read = _mock_read('is1__th__j1000', 800, 1200,
+                          [(0, 200), (1, 100), (0, 200)])
+        _, summary = self._run([read])
+        self.assertEqual(summary['is1']['n_tail_head_reads'], 0)
+
+    def test_indels_away_from_junction_allow_real_anchors(self):
+        read = _mock_read('is1__th__j1000', 800, 1210,
+                          [(0, 100), (2, 10), (0, 300)])
+        _, summary = self._run([read])
+        self.assertEqual(summary['is1']['n_tail_head_reads'], 1)
+
+    def test_hard_clips_are_not_observed_genomic_flanks(self):
+        read = _mock_read('is1__th__j1000', 5, 505, [(5, 150), (0, 500)])
+        _, summary = self._run([read])
+        self.assertEqual(summary['is1']['n_genome_head_reads'], 0)
 
     def test_genome_head_left_clip_at_zero(self):
         """Left soft-clip ≥100, alignment starts near 0 → genome_head."""

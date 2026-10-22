@@ -85,12 +85,21 @@ The pipeline creates per-batch directories:
 IS_cycle/
   batch_000/
     sra_downloads/       # FASTQs (deleted after processing)
-    reference_genomes/   # one per organism (kept)
+    reference_genomes/   # legacy submit_all.sh layout
     is_formatter_output/ # final IS records + JSONs (kept)
-    chunks/              # per-node working dirs (deleted by cleanup phase)
+    chunks/
+      chunk_N/
+        reference_genomes/ # chunk-local references, indices, status (keep)
+        sra_downloads/     # removable after all phases are verified
+        alignments/        # retain status metadata; BAMs are removable
   system_clustering_batch_000/
   novelty_batch_000/
 ```
+
+`submit_one_batch.sh` isolates references per chunk so concurrent jobs cannot
+overwrite each other's state or partially downloaded files. Do not delete the
+whole `chunks/` tree when retaining reproducible reference mappings. See
+[reliability fixes](reliability_fixes.md) for completion markers and rerun behavior.
 
 ## 5. SLURM differences
 

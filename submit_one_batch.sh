@@ -26,14 +26,14 @@
 #   3  Clustering + Novelty                             (1 node, ~6 hours)
 #   4  Partial circle                                   (N nodes, ~2 hours)
 #
-# Cleanup is manual — verify all phases completed, then delete chunks/ and assembly/ dirs.
+# Cleanup is manual — retain chunk reference_genomes/ and status metadata.
 #
 # All N nodes start immediately in Phase 1. Each chunk is independent.
-# Resolve/index is idempotent — multiple nodes can do it safely.
+# Reference genomes and status files are isolated per chunk.
 #
 # Automatically detects samples with existing guide.json and skips
 # them for phases 1-2 (but still downloads their FASTQs for phase 4).
-# After verifying all phases, manually delete chunks/ and assembly/ dirs.
+# After verifying all phases, remove only the listed large intermediates.
 
 set -e
 
@@ -82,7 +82,7 @@ ORF_ANNOTATOR=$CYCLE_DIR/scripts/run_orf_annotator.py
 GUIDE_FINDER=$CYCLE_DIR/scripts/run_guide_finder.py
 CLUSTERING=$CYCLE_DIR/scripts/run_system_clustering.py
 NOVELTY=$CYCLE_DIR/scripts/run_novelty_annotator.py
-PARTIAL_CIRCLE=$CYCLE_DIR/scripts/run_partial_circle.py
+PARTIAL_CIRCLE_BATCH=$CYCLE_DIR/scripts/run_partial_circle_batch.py
 ISFINDER=$OUTROOT/batch_000/is_reference/ISfinder_raw.fna
 
 mkdir -p "$LOGDIR"
@@ -147,7 +147,7 @@ echo ""
 
 # ── Phase 1: Download + Resolve + Align + Sniffles + Format (N nodes) ──
 # All N nodes start immediately — no dependency bottleneck.
-# Resolve/index is idempotent: first node to finish downloads refs, others skip.
+# Each chunk owns its reference genomes, indices and resolution status.
 echo "Phase 1: Download + Resolve + Align + Sniffles + Format ($NODES nodes)"
 
 P1_JOBIDS=()
@@ -161,13 +161,13 @@ for i in $(seq 0 $((NODES - 1))); do
     n_incomplete=$(tail -n +2 "$INC_TSV" 2>/dev/null | wc -l)
 
     # Download ALL samples in chunk (needed for partial circle later)
-    # Resolve + Index references (idempotent across nodes)
+    # Resolve + Index references in the chunk-local directory
     P1_CMD="$ENV_SETUP && \\
 echo '=== Phase 1 chunk $i: Download + Resolve + Index ===' && \\
 python $PIPELINE \\
   --metadata '$ALL_TSV' \\
   --fastq-dir '$CDIR/sra_downloads' \\
-  --ref-dir '$BATCH_DIR/reference_genomes' \\
+  --ref-dir '$CDIR/reference_genomes' \\
   --align-dir '$CDIR/alignments' \\
   --steps download resolve index \\
   --threads 44"
@@ -179,7 +179,7 @@ echo '=== Phase 1 chunk $i: Align ($n_incomplete samples) ===' && \\
 python $PIPELINE \\
   --metadata '$INC_TSV' \\
   --fastq-dir '$CDIR/sra_downloads' \\
-  --ref-dir '$BATCH_DIR/reference_genomes' \\
+  --ref-dir '$CDIR/reference_genomes' \\
   --align-dir '$CDIR/alignments' \\
   --steps align \\
   --threads 44 && \\
@@ -187,7 +187,7 @@ echo '=== Phase 1 chunk $i: Sniffles + Circle + Format ===' && \\
 python $PIPELINE \\
   --metadata '$INC_TSV' \\
   --fastq-dir '$CDIR/sra_downloads' \\
-  --ref-dir '$BATCH_DIR/reference_genomes' \\
+  --ref-dir '$CDIR/reference_genomes' \\
   --align-dir '$CDIR/alignments' \\
   --sniffles-dir '$CDIR/sniffles_output' \\
   --circle-dir '$CDIR/circle_output' \\
@@ -303,7 +303,7 @@ P3_JOBID=$(sbatch --parsable \
 echo "  Job $P3_JOBID (dep: all Phase 2)"
 
 # ── Phase 4: Partial circle (N nodes, all samples) ─────────────────
-# Depends on Phase 3 (needs clustering done).
+# Depends on Phase 3 and this chunk's Phase 1 download job.
 # Uses FASTQs from Phase 1 (still in chunks/chunk_N/sra_downloads/).
 echo ""
 echo "Phase 4: Partial circle ($NODES nodes)"
@@ -316,53 +316,7 @@ for i in $(seq 0 $((NODES - 1))); do
     CDIR="$CHUNK_DIR/chunk_${i}"
     [[ ! -f "$ALL_TSV" ]] && continue
 
-    # Write per-chunk Python script (avoids nested quoting issues)
-    PC_SCRIPT="$CHUNK_DIR/run_partial_circle_chunk_${i}.py"
-    cat > "$PC_SCRIPT" << PCEOF
-import os, subprocess, sys
-sys.path.insert(0, "$CYCLE_DIR")
-from pathlib import Path
-from cycle.utils import find_fastq
-import pandas as pd
-
-chunk_meta = pd.read_csv("$ALL_TSV", sep="\t")
-sra_dir = Path("$CDIR/sra_downloads")
-pc_dir = "$PC_DIR"
-fmt_dir = "$FMT_DIR"
-os.makedirs(pc_dir, exist_ok=True)
-
-samples = []
-for _, row in chunk_meta.iterrows():
-    sid = row["srr_accession"]
-    if os.path.isdir(os.path.join(pc_dir, sid)):
-        continue
-    jf = os.path.join(fmt_dir, sid, f"{sid}_is_records_guide.json")
-    if not os.path.exists(jf):
-        continue
-    fq = find_fastq(sra_dir, sid)
-    if fq:
-        samples.append((sid, jf, str(fq)))
-
-print(f"Partial circle chunk $i: {len(samples)} samples to process")
-for sid, jf, fq in samples:
-    out = os.path.join(pc_dir, sid)
-    cmd = [
-        "python", "$PARTIAL_CIRCLE",
-        "--is-records", jf,
-        "--fastq", fq,
-        "--sample-id", sid,
-        "--output-dir", out,
-        "--threads", "8",
-    ]
-    print(f"  Running {sid}...")
-    subprocess.run(cmd, check=False)
-print(f"Partial circle chunk $i: done")
-PCEOF
-
-    P4_CMD="$ENV_SETUP && \\
-echo '=== Phase 4 chunk $i: Partial circle ===' && \\
-python3 '$PC_SCRIPT' && \\
-echo '=== Phase 4 chunk $i done ==='"
+    P4_CMD="$ENV_SETUP && python '$PARTIAL_CIRCLE_BATCH' --input-dir '$FMT_DIR' --sample-list '$ALL_TSV' --fastq-dir '$CDIR/sra_downloads' --output-dir '$PC_DIR' --threads 8"
 
     jobid=$(sbatch --parsable \
         --job-name="${batch_name}_p4_${i}" \
@@ -371,7 +325,7 @@ echo '=== Phase 4 chunk $i done ==='"
         --time=12:00:00 \
         --output="$LOGDIR/${batch_name}_p4_${i}_%j.out" \
         --error="$LOGDIR/${batch_name}_p4_${i}_%j.err" \
-        --dependency="afterok:${P3_JOBID}" \
+        --dependency="afterok:${P3_JOBID}:${P1_JOBIDS[$i]}" \
         --wrap="$P4_CMD")
 
     P4_JOBIDS+=("$jobid")
