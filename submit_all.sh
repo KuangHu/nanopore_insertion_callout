@@ -64,7 +64,7 @@ GUIDE_FINDER=$CYCLE_DIR/scripts/run_guide_finder.py
 ORF_ANNOTATOR=$CYCLE_DIR/scripts/run_orf_annotator.py
 CLUSTERING=$CYCLE_DIR/scripts/run_system_clustering.py
 NOVELTY=$CYCLE_DIR/scripts/run_novelty_annotator.py
-PARTIAL_CIRCLE=$CYCLE_DIR/scripts/run_partial_circle.py
+PARTIAL_CIRCLE_BATCH=$CYCLE_DIR/scripts/run_partial_circle_batch.py
 
 OUTROOT=/groups/rubin/projects/kuang/out/IS_cycle
 LOGDIR=$HOME/logs
@@ -191,42 +191,7 @@ python $NOVELTY \\
   --output-dir '$novelty_dir' \\
   --isfinder-fasta '$isfinder' \\
   --threads 44 && \\
-echo '=== Step 5c: Partial circle detection ===' && \\
-python -c \"
-import json, os, glob, subprocess, sys
-sys.path.insert(0, '$CYCLE_DIR')
-from cycle.utils import find_fastq
-
-fmt_dir = '$fmt_dir'
-sra_dir = '$batch_dir/sra_downloads'
-pc_dir = '$pc_dir'
-os.makedirs(pc_dir, exist_ok=True)
-
-# Find all samples with guide JSONs
-samples = []
-for jf in sorted(glob.glob(os.path.join(fmt_dir, '*', '*_is_records_guide.json'))):
-    sid = os.path.basename(os.path.dirname(jf))
-    if os.path.isdir(os.path.join(pc_dir, sid)):
-        continue  # already done
-    fq = find_fastq(sra_dir, sid)
-    if fq:
-        samples.append((sid, jf, str(fq)))
-
-print(f'Partial circle: {len(samples)} samples to process')
-for sid, jf, fq in samples:
-    out = os.path.join(pc_dir, sid)
-    cmd = [
-        'python', '$PARTIAL_CIRCLE',
-        '--is-records', jf,
-        '--fastq', fq,
-        '--sample-id', sid,
-        '--output-dir', out,
-        '--threads', '8',
-    ]
-    print(f'  Running {sid}...')
-    subprocess.run(cmd, check=False)
-print('Partial circle: done')
-\""
+echo '=== Step 5c: Partial circle detection ===' && python '$PARTIAL_CIRCLE_BATCH' --input-dir '$fmt_dir' --fastq-dir '$batch_dir/sra_downloads' --output-dir '$pc_dir' --threads 8"
             ;;
     esac
 

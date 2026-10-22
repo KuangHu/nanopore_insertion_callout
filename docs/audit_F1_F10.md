@@ -4,6 +4,15 @@
 **Audit scope:** Sniffles VCF → insertion table → circle bait / reads → formatter read-recruitment, assembly, locate, fallback paths, JSON/TSV outputs; CLI defaults, batch success semantics, downstream coordinate consumers.
 **What this doc is for:** a durable record of the correctness gaps the external review identified, their current remediation status, and the planned fix order. The audit did not modify business code; neither does this doc. Any analysis using current outputs must consult the "Impact on existing deliverables" table before being treated as validated.
 
+**2026-10-22 update:** The formatter now rejects clipped/incomplete and
+secondary/supplementary localization alignments (the reproduced F3 truncation
+cases). F3 remains partial because this does not validate locus identity or
+sequence identity. F4 now checks query-aligned anchors and an actual junction
+bridge in the CIGAR, with positive and negative regression cases. The detailed
+behaviors/reproductions below describe the original audit baseline; existing
+deliverables have not been revalidated. See [reliability fixes](reliability_fixes.md)
+for the implementation scope and test limitations.
+
 ---
 
 ## Severity + status overview
@@ -12,8 +21,8 @@
 |-----|----------|--------------------------|---------------------------------|
 | F1  | P1       | sniffles_runner `<INS>`  | open                            |
 | F2  | P1       | read recruitment anchor  | open                            |
-| F3  | P1       | formatter locate quality | partially addressed (v3 refiner only; formatter itself unchanged) |
-| F4  | P1       | TH-junction counting     | open                            |
+| F3  | P1       | formatter locate quality | partially addressed (formatter coverage/flags; identity validation remains) |
+| F4  | P1       | TH-junction counting     | CIGAR gap defect addressed; synthetic tests only |
 | F5  | P2       | coordinate semantics     | partially addressed (one downstream consumer patched) |
 | F6  | P2       | strand propagation       | open                            |
 | F7  | P2       | success/failure labeling | partially addressed (v3 refiner records status; formatter unchanged) |

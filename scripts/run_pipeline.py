@@ -459,8 +459,10 @@ def main():
         if skipped:
             logger.info(f"Skipped {skipped} samples (no ref or FASTQ)")
 
+        failed = skipped
         if sample_map:
             results = aligner.align_batch(sample_map)
+            failed += sum(1 for r in results if not r["bam"])
 
             status_path = Path(args.align_dir) / "alignment_status.tsv"
             rows = []
@@ -474,6 +476,10 @@ def main():
                 })
             pd.DataFrame(rows).to_csv(status_path, sep="\t", index=False)
             logger.info(f"Alignment status saved to {status_path}")
+
+        if failed:
+            logger.error(f"Alignment incomplete: {failed} samples failed or lack inputs")
+            sys.exit(1)
 
     # ── Stage 5: IS reference ────────────────────────────────────────
     if "is_ref" in steps:

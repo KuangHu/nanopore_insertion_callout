@@ -370,17 +370,34 @@ class ISFormatter:
                 continue
 
             flag = int(fields[1])
-            if flag & 4:  # unmapped
+            if flag & (4 | 256 | 2048):  # unmapped, secondary, supplementary
                 continue
 
             mapq = int(fields[4])
             pos = int(fields[3]) - 1  # SAM is 1-based
             cigar = fields[5]
 
+            # A local match cannot define both ends of the full insertion.
+            # Require a complete primary query alignment with known mapping
+            # confidence. Reject clipped/split candidates rather than silently
+            # exporting their aligned subinterval as the complete element.
+            operations = re.findall(r"(\d+)([MIDNSHP=X])", cigar)
+            if not operations or "".join(n + op for n, op in operations) != cigar:
+                continue
+            if mapq == 0 or mapq == 255 or any(op in "SHN" for _, op in operations):
+                continue
+            query_len = sum(int(n) for n, op in operations if op in "MI=X")
+            if query_len != len(consensus_seq):
+                continue
+            if operations[0][1] not in "M=X" or operations[-1][1] not in "M=X":
+                continue
+
             # Calculate alignment length from CIGAR
             ref_len = sum(
                 int(n) for n, op in re.findall(r"(\d+)([MDNX=])", cigar)
             )
+            if pos < 0 or ref_len <= 0 or pos + ref_len > len(contig_seq):
+                continue
 
             strand = "-" if (flag & 16) else "+"
 

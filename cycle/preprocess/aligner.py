@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from ..processes import run_checked_pipe
 from .config import (
     DEFAULT_ALIGNMENT_DIR,
     DEFAULT_MINIMAP2_PRESET,
@@ -101,6 +102,7 @@ class Aligner:
             sample_id = fastq.name.split(".")[0]
 
         bam = self.output_dir / f"{sample_id}.sorted.bam"
+        pending_bam = bam.with_name(f".{bam.stem}.pending.bam")
 
         if bam.exists() and Path(str(bam) + ".bai").exists():
             logger.info(f"BAM exists: {bam}")
@@ -125,61 +127,27 @@ class Aligner:
             "samtools", "sort",
             "-@", str(self.threads),
             "-m", self.sort_memory,
-            "-o", str(bam),
+            "-o", str(pending_bam),
             "-",
         ]
 
         logger.info(f"Aligning {fastq.name} → {bam.name}")
         try:
-            mm2_proc = subprocess.Popen(
-                mm2_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            run_checked_pipe(mm2_cmd, sort_cmd, timeout=self.timeout)
+            subprocess.run(
+                ["samtools", "index", str(pending_bam)],
+                capture_output=True, text=True, check=True, timeout=self.timeout,
             )
-            sort_proc = subprocess.Popen(
-                sort_cmd,
-                stdin=mm2_proc.stdout,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            # Allow mm2 to receive SIGPIPE if sort exits early
-            mm2_proc.stdout.close()
-
-            sort_out, sort_err = sort_proc.communicate(timeout=self.timeout)
-            mm2_err = mm2_proc.stderr.read()
-            mm2_proc.stderr.close()
-            mm2_proc.wait()
-
-            if sort_proc.returncode != 0:
-                logger.error(
-                    f"samtools sort failed for {sample_id}: "
-                    f"{sort_err.decode().strip()}"
-                )
-                return None
-
-        except subprocess.TimeoutExpired:
-            logger.warning(
-                f"TIMEOUT: {sample_id} exceeded {self.timeout}s — killing and skipping"
-            )
-            sort_proc.kill()
-            mm2_proc.kill()
-            sort_proc.wait()
-            mm2_proc.wait()
-            # Clean up partial BAM
-            if bam.exists():
-                bam.unlink()
-            return None
-
+            # Publish only a complete BAM and index. Interrupted pending files
+            # are never eligible for the existing-output shortcut above.
+            pending_bam.replace(bam)
+            Path(str(pending_bam) + ".bai").replace(Path(str(bam) + ".bai"))
         except Exception as exc:
-            logger.error(f"Alignment pipeline failed for {sample_id}: {exc}")
+            logger.error(f"Alignment pipeline failed for {sample_id}: {exc}; {getattr(exc, 'stderr', '')}")
             return None
-
-        # Index the BAM
-        ret = subprocess.run(
-            ["samtools", "index", str(bam)],
-            capture_output=True, text=True,
-        )
-        if ret.returncode != 0:
-            logger.error(f"samtools index failed: {ret.stderr.strip()}")
-            return None
+        finally:
+            pending_bam.unlink(missing_ok=True)
+            Path(str(pending_bam) + ".bai").unlink(missing_ok=True)
 
         logger.info(f"  → {bam} + .bai")
         return bam
