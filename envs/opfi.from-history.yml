@@ -1,0 +1,37 @@
+name: opfi
+channels:
+  - bioconda
+  - defaults
+  - conda-forge
+dependencies:
+  - opfi
+  - jupyter
+  - ca-certificates
+  - certifi
+  - openssl
+  - kraken2==2.14
+  - pandas
+  - ncbi-datasets-cli
+  - seaborn
+  - infernal==1.1.5
+  - conda-forge::rclone
+  - bioconda/label/cf201901::cmfinder
+  - conda-forge::pymol-open-source
+  - openbabel
+  - ostir
+  - entrez-direct
+  - isescan
+  - bakta
+  - bioconda::iqtree
+  - sra-tools
+  - kingfisher
+  - locarna
+  - hmmer
+  - genomad
+  - pymsaviz
+  - exonerate
+  - gh
+  - sniffles
+  - locate
+  - miniasm
+  - minipolish

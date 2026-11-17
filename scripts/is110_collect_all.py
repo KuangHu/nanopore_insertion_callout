@@ -8,12 +8,13 @@ import sys
 from collections import defaultdict
 
 csv.field_size_limit(10_000_000)
-sys.path.insert(0, '/home/kuangh/tools/Cycle')
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # repository root
+from cycle.site_config import data_root  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-BASE = "/groups/rubin/projects/kuang/out/IS_cycle"
+BASE = str(data_root())
 HMM_DIR = f"{BASE}/is110_all_006_026"
 OUT = f"{BASE}/is110_all_006_026/collected"
 os.makedirs(OUT, exist_ok=True)

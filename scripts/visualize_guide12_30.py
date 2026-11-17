@@ -13,6 +13,7 @@ from collections import defaultdict
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from cycle.visualizer import ISElementVisualizer, ISElementGenBank
+from cycle.site_config import data_root
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,9 +21,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-FORMATTER_DIR = "/groups/rubin/projects/kuang/out/IS_cycle/batch_000/is_formatter_output"
-CLUSTER_TSV = "/groups/rubin/projects/kuang/out/IS_cycle/system_clustering_batch000/system_clusters_summary.tsv"
-OUTPUT_DIR = "/groups/rubin/projects/kuang/out/IS_cycle/visualizations_guide12_30"
+FORMATTER_DIR = str(data_root() / "batch_000" / "is_formatter_output")
+CLUSTER_TSV = str(data_root() / "system_clustering_batch000" / "system_clusters_summary.tsv")
+OUTPUT_DIR = str(data_root() / "visualizations_guide12_30")
 TARGET_CLUSTERS = {0, 1, 3, 4, 5, 10, 13}
 MIN_GL = 12
 MAX_GL = 30

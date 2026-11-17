@@ -23,10 +23,13 @@ from collections import defaultdict
 from glob import glob
 from typing import Dict, List, Optional, Set, Tuple
 
+from ..site_config import hmm_dir
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_DEDD_HMM = "/home/kuangh/scripts/IS110/hmm/DEDD.hmm"
-DEFAULT_TNP20_HMM = "/home/kuangh/scripts/IS110/hmm/Tnp20.hmm"
+# HMM location comes from CYCLE_HMM_DIR (see cycle/site_config.py and config/*.env)
+DEFAULT_DEDD_HMM = str(hmm_dir() / "DEDD.hmm")
+DEFAULT_TNP20_HMM = str(hmm_dir() / "Tnp20.hmm")
 
 
 class IS110Filter:

@@ -57,7 +57,10 @@ START=${1:-5}
 END=${2:-94}
 
 # ── Paths ────────────────────────────────────────────────────────────
-CYCLE_DIR=/home/kuangh/tools/Cycle
+# Code, data, log, environment and scheduler locations come from config/ (see config/load_site.sh).
+# Legacy submitter (superseded by submit_one_batch.sh); per-step CPU/memory below are IGI node sizes.
+source "${CYCLE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/config/load_site.sh"
+CYCLE_DIR=$CYCLE_ROOT
 PIPELINE=$CYCLE_DIR/scripts/run_pipeline.py
 PREPARE_META=$CYCLE_DIR/scripts/prepare_batch_metadata.py
 GUIDE_FINDER=$CYCLE_DIR/scripts/run_guide_finder.py
@@ -66,11 +69,11 @@ CLUSTERING=$CYCLE_DIR/scripts/run_system_clustering.py
 NOVELTY=$CYCLE_DIR/scripts/run_novelty_annotator.py
 PARTIAL_CIRCLE_BATCH=$CYCLE_DIR/scripts/run_partial_circle_batch.py
 
-OUTROOT=/groups/rubin/projects/kuang/out/IS_cycle
-LOGDIR=$HOME/logs
-BATCHDIR=$CYCLE_DIR/data/batches
-ISFINDER=$OUTROOT/batch_000/is_reference/ISfinder_raw.fna
-CONDA_ENV=opfi
+OUTROOT=$CYCLE_DATA_ROOT
+LOGDIR=$CYCLE_LOG_DIR
+BATCHDIR=$CYCLE_BATCH_METADATA_DIR
+ISFINDER=$CYCLE_ISFINDER_FASTA
+CONDA_ENV=$CYCLE_CONDA_ENV
 
 mkdir -p "$LOGDIR"
 
@@ -121,7 +124,7 @@ for i in $(seq $START $END); do
     fi
 
     # ── Build command ────────────────────────────────────────────────
-    CMD="export PATH=/home/kuangh/miniconda3/envs/${CONDA_ENV}/bin:\$PATH"
+    CMD="export PATH=${CYCLE_ENV_PREFIX}/bin:\$PATH"
 
     case $STEP in
         1)
@@ -200,8 +203,7 @@ echo '=== Step 5c: Partial circle detection ===' && python '$PARTIAL_CIRCLE_BATC
     # ── Submit ───────────────────────────────────────────────────────
     jobid=$(sbatch --parsable \
         --job-name="${batch_name}_s${STEP}" \
-        --partition=standard \
-        --qos=standard \
+        "${CYCLE_SBATCH_SITE[@]}" \
         --nodes=1 \
         --cpus-per-task=$CPUS \
         --mem=$MEM \

@@ -11,6 +11,9 @@ import argparse
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # repository root
+from cycle.site_config import batch_metadata_dir, data_root  # noqa: E402
+
 def count_lines(path, skip_header=True):
     """Count non-empty lines in a file."""
     if not path.exists():
@@ -144,11 +147,11 @@ def main():
     parser.add_argument("start", nargs="?", type=int, default=0, help="Start batch index")
     parser.add_argument("end", nargs="?", type=int, default=None, help="End batch index (inclusive)")
     parser.add_argument(
-        "--outroot", default="/groups/rubin/projects/kuang/out/IS_cycle",
+        "--outroot", default=str(data_root()),
         help="Root output directory",
     )
     parser.add_argument(
-        "--batchdir", default="/home/kuangh/tools/Cycle/data/batches",
+        "--batchdir", default=str(batch_metadata_dir()),
         help="Directory containing batch metadata TSVs",
     )
     args = parser.parse_args()

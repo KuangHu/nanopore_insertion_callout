@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=is110_collect
-#SBATCH --output=/home/kuangh/logs/is110_collect_%j.out
-#SBATCH --error=/home/kuangh/logs/is110_collect_%j.err
 #SBATCH --time=2:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --qos=standard
-#SBATCH --partition=standard
 
-conda run -n opfi python /home/kuangh/tools/Cycle/scripts/is110_collect_simple.py
+# Site settings (partition/qos/account, log directory, data and asset paths) come from config/.
+# Submit with:  bin/cycle-sbatch scripts/is110_collect_simple.sh
+source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
+
+conda run -n "$CYCLE_CONDA_ENV" python $CYCLE_ROOT/scripts/is110_collect_simple.py

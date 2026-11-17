@@ -2,7 +2,8 @@
 import os, sys, logging
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
-sys.path.insert(0, '/home/kuangh/tools/Cycle')
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # repository root
+from cycle.site_config import ecor_dir  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -22,8 +23,8 @@ def run_one(ref, sample_id, guide_json, fastq, pc_dir):
     return f"{ref}/{sample_id}"
 
 
-BASE = Path("/groups/rubin/projects/kuang/out/IS110/ECOR_batch/output")
-FASTQ_DIR = Path("/groups/rubin/projects/kuang/out/IS110/ECOR_batch/fastq")
+BASE = ecor_dir() / "output"
+FASTQ_DIR = ecor_dir() / "fastq"
 fastq_map = {fq.name.split(".")[0]: fq for fq in FASTQ_DIR.glob("*.fastq.gz")}
 
 tasks = []

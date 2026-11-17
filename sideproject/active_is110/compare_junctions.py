@@ -7,10 +7,14 @@ For each IS110 with multiple junctions:
 """
 import csv
 import json
+import os
+import sys
 from collections import defaultdict
 from itertools import combinations
 
-BASE = "/groups/rubin/projects/kuang/out/IS_cycle/active_is110"
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))  # repository root
+from cycle.site_config import data_root  # noqa: E402
+BASE = str(data_root() / "active_is110")
 
 # Load junctions
 junctions_by_is = defaultdict(list)

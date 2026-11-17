@@ -1,16 +1,16 @@
 #!/bin/bash
 #SBATCH --job-name=ecor_batch
-#SBATCH --output=/home/kuangh/logs/ecor_batch_%j.out
-#SBATCH --error=/home/kuangh/logs/ecor_batch_%j.err
 #SBATCH --time=2-00:00:00
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=192G
-#SBATCH --qos=standard
-#SBATCH --partition=standard
 
-cd /home/kuangh/tools/Cycle
-conda run -n opfi python sideproject/run_ecor_batch.py \
-    --fastq-dir /groups/rubin/projects/kuang/out/IS110/ECOR_batch/fastq \
-    --ref-dir /groups/rubin/projects/kuang/out/IS110/ECOR_batch/reference_genomes \
-    --output-dir /groups/rubin/projects/kuang/out/IS110/ECOR_batch/output \
-    --threads 48
+# Site settings (partition/qos/account, log directory, data and asset paths) come from config/.
+# Submit with:  bin/cycle-sbatch sideproject/run_ecor_batch.sh
+source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
+
+cd "$CYCLE_ROOT"
+conda run -n "$CYCLE_CONDA_ENV" python sideproject/run_ecor_batch.py \
+    --fastq-dir $CYCLE_ECOR_DIR/fastq \
+    --ref-dir $CYCLE_ECOR_DIR/reference_genomes \
+    --output-dir $CYCLE_ECOR_DIR/output \
+    --threads ${SLURM_CPUS_PER_TASK:-48}

@@ -7,7 +7,8 @@ import csv
 import os
 import sys
 
-sys.path.insert(0, '/home/kuangh/tools/Cycle')
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # repository root
+from cycle.site_config import data_root  # noqa: E402
 
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
@@ -249,7 +250,7 @@ def plot_split(split_info, orfs, output_prefix, orf_domains=None):
 
 
 def main():
-    BASE = "/groups/rubin/projects/kuang/out/IS_cycle"
+    BASE = str(data_root())
     SPLIT_TSV = f"{BASE}/is110_split_gtdb/is110_split_hits.tsv"
     PROTEIN_FASTA = f"{BASE}/is110_all_006_026/all_proteins.faa"
     OUT_DIR = f"{BASE}/is110_split_gtdb/examples"

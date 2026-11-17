@@ -1,0 +1,22 @@
+name: cresil
+channels:
+  - bioconda
+  - defaults
+  - conda-forge
+dependencies:
+  - bioawk
+  - biopython=1.70
+  - flye==2.6=py36he513fc3_0
+  - mappy==2.17=py36h84994c4_0
+  - matplotlib=3.1.1
+  - minimap2==2.17=h8b12597_1
+  - networkx=2.3
+  - numpy=1.12.1
+  - pandas=0.24.2
+  - pybedtools=0.8.0
+  - pysam=0.15.3
+  - python-graphviz=0.13.2
+  - python-intervaltree=3.0.2
+  - python=3.6.7
+  - samtools
+  - tqdm=4.7.2

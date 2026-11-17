@@ -260,14 +260,15 @@ class TestChunkReferences(TemporaryTest):
         pd.DataFrame([{'srr_accession':'sample_A', 'organism':'A'},
                       {'srr_accession':'sample_B', 'organism':'B'}]).to_csv(metadata, sep='\t', index=False)
         script = (ROOT / 'submit_one_batch.sh').read_text(encoding='utf-8')
-        script = script.replace('CYCLE_DIR=/home/kuangh/tools/Cycle', 'CYCLE_DIR=' + shlex.quote(ROOT.as_posix()))
-        script = script.replace('OUTROOT=/groups/rubin/projects/kuang/out/IS_cycle', 'OUTROOT=' + shlex.quote((self.root / 'outputs').as_posix()))
-        script = script.replace('METADATA=$CYCLE_DIR/data/batches/${batch_name}.tsv', 'METADATA=' + shlex.quote(metadata.as_posix()))
-        script = script.replace('LOGDIR=$HOME/logs', 'LOGDIR=' + shlex.quote((self.root / 'logs').as_posix()))
         script_path = self.root / 'submit.sh'
         script_path.write_text(script, encoding='utf-8', newline='\n')
         capture = self.root / 'args.bin'
-        harness = ('python3() { ' + shlex.quote(Path(sys.executable).as_posix()) + ' "$@"; }; export -f python3\n'
+        # Locations come from site settings (config/load_site.sh); exported CYCLE_* variables win.
+        site = {'CYCLE_ROOT': ROOT.as_posix(), 'CYCLE_DATA_ROOT': (self.root / 'outputs').as_posix(),
+                'CYCLE_BATCH_METADATA_DIR': batch_dir.as_posix(), 'CYCLE_LOG_DIR': (self.root / 'logs').as_posix(),
+                'CYCLE_SITE_ENV': (ROOT / 'config' / 'igi.env').as_posix(), 'CYCLE_QUIET': '1'}
+        harness = (''.join(f'export {k}={shlex.quote(v)}\n' for k, v in site.items()) +
+                   'python3() { ' + shlex.quote(Path(sys.executable).as_posix()) + ' "$@"; }; export -f python3\n'
                    'sbatch() { printf "%s\\0" "$@" >> ' + shlex.quote(capture.as_posix()) + '; echo 101; }; export -f sbatch\n'
                    + shlex.quote(Path(bash).as_posix()) + ' ' + shlex.quote(script_path.as_posix()) + ' 1 --nodes 2\n')
         result = subprocess.run([bash, '-c', harness], capture_output=True, text=True, encoding='utf-8')

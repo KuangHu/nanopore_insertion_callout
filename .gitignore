@@ -27,3 +27,8 @@ Thumbs.db
 
 # SLURM logs
 slurm-*.out
+
+# Per-cluster site settings (copy from config/*.env.example)
+config/site.env
+# Orphaned tool temp dirs (e.g. minipolish TemporaryDirectory killed by a timeout)
+/tmp*/

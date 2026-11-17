@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=ecor_pc
-#SBATCH --output=/home/kuangh/logs/ecor_pc_%j.out
-#SBATCH --error=/home/kuangh/logs/ecor_pc_%j.err
 #SBATCH --time=6:00:00
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --qos=standard
-#SBATCH --partition=standard
 
-conda run -n opfi python /home/kuangh/tools/Cycle/sideproject/run_ecor_partial_circle.py
+# Site settings (partition/qos/account, log directory, data and asset paths) come from config/.
+# Submit with:  bin/cycle-sbatch sideproject/run_ecor_partial_circle.sh
+source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
+
+conda run -n "$CYCLE_CONDA_ENV" python $CYCLE_ROOT/sideproject/run_ecor_partial_circle.py

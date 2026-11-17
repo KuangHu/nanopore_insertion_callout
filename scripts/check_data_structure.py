@@ -5,9 +5,9 @@ Validates per-batch directories and cross-batch analysis directories
 against the canonical layout defined in DATA_STRUCTURE.md.
 
 Usage:
-    python scripts/check_data_structure.py /groups/rubin/projects/kuang/out/IS_cycle
-    python scripts/check_data_structure.py /groups/rubin/projects/kuang/out/IS_cycle --batch 000
-    python scripts/check_data_structure.py /groups/rubin/projects/kuang/out/IS_cycle --fix
+    python scripts/check_data_structure.py "$CYCLE_DATA_ROOT"
+    python scripts/check_data_structure.py "$CYCLE_DATA_ROOT" --batch 000
+    python scripts/check_data_structure.py "$CYCLE_DATA_ROOT" --fix
 """
 
 import argparse

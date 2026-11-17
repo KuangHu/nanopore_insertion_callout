@@ -67,15 +67,23 @@ fi
 
 batch_name=$(printf 'batch_%03d' "$BATCH_NUM")
 
-# ── Paths ──────────────────────────────────────────────────────────
-CYCLE_DIR=/home/kuangh/tools/Cycle
-OUTROOT=/groups/rubin/projects/kuang/out/IS_cycle
+# ── Paths and site settings ────────────────────────────────────────
+# Code, data, log, environment and scheduler locations come from config/site.env (falling back to
+# config/igi.env); exported CYCLE_* variables override both. See config/load_site.sh.
+source "${CYCLE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/config/load_site.sh"
+CYCLE_DIR=$CYCLE_ROOT
+OUTROOT=$CYCLE_DATA_ROOT
 BATCH_DIR=$OUTROOT/$batch_name
 FMT_DIR=$BATCH_DIR/is_formatter_output
-METADATA=$CYCLE_DIR/data/batches/${batch_name}.tsv
-LOGDIR=$HOME/logs
-CONDA_ENV=opfi
-ENV_SETUP="export PATH=/home/kuangh/miniconda3/envs/${CONDA_ENV}/bin:\$PATH"
+METADATA=$CYCLE_BATCH_METADATA_DIR/${batch_name}.tsv
+LOGDIR=$CYCLE_LOG_DIR
+CONDA_ENV=$CYCLE_CONDA_ENV
+ENV_SETUP="export PATH=${CYCLE_ENV_PREFIX}/bin:\$PATH"
+
+# Per-job parallelism follows the node size (48 CPUs -> 44 threads, 6 x 8, 20 workers as before)
+THREADS=$(( CYCLE_SLURM_CPUS > 8 ? CYCLE_SLURM_CPUS - 4 : CYCLE_SLURM_CPUS ))
+PAR8=$(( CYCLE_SLURM_CPUS >= 16 ? CYCLE_SLURM_CPUS / 8 : 1 ))
+PAR20=$(( CYCLE_SLURM_CPUS < 20 ? CYCLE_SLURM_CPUS : 20 ))
 
 PIPELINE=$CYCLE_DIR/scripts/run_pipeline.py
 ORF_ANNOTATOR=$CYCLE_DIR/scripts/run_orf_annotator.py
@@ -83,7 +91,7 @@ GUIDE_FINDER=$CYCLE_DIR/scripts/run_guide_finder.py
 CLUSTERING=$CYCLE_DIR/scripts/run_system_clustering.py
 NOVELTY=$CYCLE_DIR/scripts/run_novelty_annotator.py
 PARTIAL_CIRCLE_BATCH=$CYCLE_DIR/scripts/run_partial_circle_batch.py
-ISFINDER=$OUTROOT/batch_000/is_reference/ISfinder_raw.fna
+ISFINDER=$CYCLE_ISFINDER_FASTA
 
 mkdir -p "$LOGDIR"
 
@@ -170,7 +178,7 @@ python $PIPELINE \\
   --ref-dir '$CDIR/reference_genomes' \\
   --align-dir '$CDIR/alignments' \\
   --steps download resolve index \\
-  --threads 44"
+  --threads $THREADS"
 
     # Align + Sniffles + Circle + Format for INCOMPLETE samples only
     if [[ "$n_incomplete" -gt 0 ]]; then
@@ -182,7 +190,7 @@ python $PIPELINE \\
   --ref-dir '$CDIR/reference_genomes' \\
   --align-dir '$CDIR/alignments' \\
   --steps align \\
-  --threads 44 && \\
+  --threads $THREADS && \\
 echo '=== Phase 1 chunk $i: Sniffles + Circle + Format ===' && \\
 python $PIPELINE \\
   --metadata '$INC_TSV' \\
@@ -193,15 +201,15 @@ python $PIPELINE \\
   --circle-dir '$CDIR/circle_output' \\
   --formatter-dir '$FMT_DIR' \\
   --steps sniffles circle format \\
-  --parallel 6 --threads 8"
+  --parallel $PAR8 --threads 8"
     fi
 
     P1_CMD="$P1_CMD && echo '=== Phase 1 chunk $i done ==='"
 
     jobid=$(sbatch --parsable \
         --job-name="${batch_name}_p1_${i}" \
-        --partition=standard --qos=standard \
-        --nodes=1 --cpus-per-task=48 --mem=192G \
+        "${CYCLE_SBATCH_SITE[@]}" \
+        --nodes=1 --cpus-per-task="$CYCLE_SLURM_CPUS" --mem="$CYCLE_SLURM_MEM" \
         --time=3-00:00:00 \
         --output="$LOGDIR/${batch_name}_p1_${i}_%j.out" \
         --error="$LOGDIR/${batch_name}_p1_${i}_%j.err" \
@@ -230,18 +238,18 @@ echo '=== Phase 2 chunk $i: ORF annotation ===' && \\
 python $ORF_ANNOTATOR \\
   --input-dir '$FMT_DIR' \\
   --sample-list '$INC_TSV' \\
-  --parallel 20 && \\
+  --parallel $PAR20 && \\
 echo '=== Phase 2 chunk $i: Guide finder ===' && \\
 python $GUIDE_FINDER \\
   --input-dir '$FMT_DIR' \\
   --sample-list '$INC_TSV' \\
-  --parallel 20 && \\
+  --parallel $PAR20 && \\
 echo '=== Phase 2 chunk $i done ==='"
 
     jobid=$(sbatch --parsable \
         --job-name="${batch_name}_p2_${i}" \
-        --partition=standard --qos=standard \
-        --nodes=1 --cpus-per-task=48 --mem=192G \
+        "${CYCLE_SBATCH_SITE[@]}" \
+        --nodes=1 --cpus-per-task="$CYCLE_SLURM_CPUS" --mem="$CYCLE_SLURM_MEM" \
         --time=6:00:00 \
         --output="$LOGDIR/${batch_name}_p2_${i}_%j.out" \
         --error="$LOGDIR/${batch_name}_p2_${i}_%j.err" \
@@ -279,22 +287,22 @@ echo '=== Phase 3: System clustering ===' && \\
 python $CLUSTERING \\
   --input-dirs '$FMT_DIR' \\
   --output-dir '$CLUSTER_DIR' \\
-  --threads 44 && \\
+  --threads $THREADS && \\
 echo '=== Phase 3: Novelty annotation ===' && \\
 python $NOVELTY \\
   --input-dirs '$FMT_DIR' \\
   --clusters '$CLUSTER_DIR/system_clusters.json' \\
   --output-dir '$NOVELTY_DIR' \\
   --isfinder-fasta '$ISFINDER_PATH' \\
-  --threads 44 && \\
+  --threads $THREADS && \\
 echo '=== Phase 3 done ==='"
 
 P3_JOBID=$(sbatch --parsable \
     --job-name="${batch_name}_p3" \
-    --partition=standard --qos=standard \
-    --nodes=1 --cpus-per-task=48 --mem=192G \
+    "${CYCLE_SBATCH_SITE[@]}" \
+    --nodes=1 --cpus-per-task="$CYCLE_SLURM_CPUS" --mem="$CYCLE_SLURM_MEM" \
     --time=12:00:00 \
-    --exclude="node-48-256g-2,node-48-256g-3,node-48-256g-8,node-48-256g-9,node-48-256g-12,node-48-256g-13,node-48-256g-14,node-48-256g-17,node-48-256g-18,node-48-256g-19,node-48-256g-20" \
+    ${CYCLE_SLURM_AVX2_EXCLUDE:+"--exclude=$CYCLE_SLURM_AVX2_EXCLUDE"} \
     --output="$LOGDIR/${batch_name}_p3_%j.out" \
     --error="$LOGDIR/${batch_name}_p3_%j.err" \
     --dependency="afterok:${P2_DEP}" \
@@ -320,8 +328,8 @@ for i in $(seq 0 $((NODES - 1))); do
 
     jobid=$(sbatch --parsable \
         --job-name="${batch_name}_p4_${i}" \
-        --partition=standard --qos=standard \
-        --nodes=1 --cpus-per-task=48 --mem=192G \
+        "${CYCLE_SBATCH_SITE[@]}" \
+        --nodes=1 --cpus-per-task="$CYCLE_SLURM_CPUS" --mem="$CYCLE_SLURM_MEM" \
         --time=12:00:00 \
         --output="$LOGDIR/${batch_name}_p4_${i}_%j.out" \
         --error="$LOGDIR/${batch_name}_p4_${i}_%j.err" \

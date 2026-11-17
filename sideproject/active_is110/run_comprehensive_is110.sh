@@ -1,20 +1,20 @@
 #!/bin/bash
 #SBATCH --job-name=is110_comprehensive
-#SBATCH --output=/home/kuangh/logs/is110_comprehensive_%j.out
-#SBATCH --error=/home/kuangh/logs/is110_comprehensive_%j.err
 #SBATCH --time=12:00:00
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=192G
-#SBATCH --qos=standard
-#SBATCH --partition=standard
 
-cd /home/kuangh/tools/Cycle
-BASE=/groups/rubin/projects/kuang/out/IS_cycle
+# Site settings (partition/qos/account, log directory, data and asset paths) come from config/.
+# Submit with:  bin/cycle-sbatch sideproject/active_is110/run_comprehensive_is110.sh
+source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
+
+cd "$CYCLE_ROOT"
+BASE=$CYCLE_DATA_ROOT
 OUT=$BASE/is110_all_006_070
 mkdir -p $OUT
 
 echo "=== Step 1: Build consensus FASTA from Sniffles (006-070) ==="
-conda run -n opfi python -c "
+conda run -n "$CYCLE_CONDA_ENV" python -c "
 import csv, glob, os
 csv.field_size_limit(10_000_000)
 BASE = '$BASE'
@@ -52,7 +52,7 @@ print(f'Total sequences: {n}')
 
 echo "=== Step 2: Parallel Prodigal (48 chunks) ==="
 mkdir -p $OUT/prodigal_chunks
-conda run -n opfi python -c "
+conda run -n "$CYCLE_CONDA_ENV" python -c "
 fasta = '$OUT/all_consensus.fna'
 out_dir = '$OUT/prodigal_chunks'
 seqs = []
@@ -76,17 +76,17 @@ for i in range(48):
 for i in $(seq 0 47); do
     CHUNK=$OUT/prodigal_chunks/chunk_${i}.fna
     [ ! -f "$CHUNK" ] && continue
-    conda run -n opfi prodigal -i $CHUNK -a $OUT/prodigal_chunks/chunk_${i}.faa -o /dev/null -p meta -q &
+    conda run -n "$CYCLE_CONDA_ENV" prodigal -i $CHUNK -a $OUT/prodigal_chunks/chunk_${i}.faa -o /dev/null -p meta -q &
 done
 wait
 cat $OUT/prodigal_chunks/chunk_*.faa > $OUT/all_proteins.faa
 echo "Proteins: $(grep -c '^>' $OUT/all_proteins.faa)"
 
 echo "=== Step 3: HMM ==="
-conda run -n opfi python -c "
+conda run -n "$CYCLE_CONDA_ENV" python -c "
 import json, logging, os, sys
 from collections import defaultdict
-sys.path.insert(0, '/home/kuangh/tools/Cycle')
+sys.path.insert(0, '$CYCLE_ROOT')
 from cycle.is110_filter import IS110Filter
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 

@@ -1,0 +1,264 @@
+file	line_in_original	original_text	purpose	disposition
+DATA_STRUCTURE.md	3	/groups/rubin/projects/kuang/out/IS_cycle/	data root (IS_cycle)	kept: historical record of IGI locations
+PIPELINE_METHODS.md	41	/home/kuangh/tools/cycle_rna_analysis/cresil_nanocircle	sibling project location	kept: historical record of IGI locations
+PIPELINE_NOTES.md	109	/home/kuangh/scripts/IS110/hmm/	reference asset	kept: historical record of IGI locations
+PIPELINE_SUMMARY_IS110.md	33	/home/kuangh/scripts/IS110/hmm/	reference asset	kept: historical record of IGI locations
+cycle/is110_filter/filter.py	28	/home/kuangh/scripts/IS110/hmm/DEDD.hmm	reference asset	CYCLE_HMM_DIR / CYCLE_GTDB_GENOMES_DIR / CYCLE_GTDB_BLASTDB
+cycle/is110_filter/filter.py	29	/home/kuangh/scripts/IS110/hmm/Tnp20.hmm	reference asset	CYCLE_HMM_DIR / CYCLE_GTDB_GENOMES_DIR / CYCLE_GTDB_BLASTDB
+docs/lawrence_setup.md	24	/home/kuangh/tools/Cycle	code location	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	25	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	26	CONDA_ENV=opfi	software environment	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	30	--partition=standard	scheduler: site	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	30	--qos=standard	scheduler: site	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	32	--partition=lr_normal	scheduler: site	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	32	--qos=lr_normal	scheduler: site	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	50	/home/kuangh/scripts/IS110/hmm/DEDD.hmm	reference asset	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	51	/home/kuangh/scripts/IS110/hmm/Tnp20.hmm	reference asset	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	62	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	rewritten: docs/lawrence_setup.md now describes config/
+docs/lawrence_setup.md	63	/home/kuangh/tools/Cycle/data/batches	code location	rewritten: docs/lawrence_setup.md now describes config/
+docs/part2_analysis.md	72	/home/kuangh/scripts/IS110/hmm/DEDD.hmm	reference asset	kept: historical record of IGI locations
+docs/part2_analysis.md	73	/home/kuangh/scripts/IS110/hmm/Tnp20.hmm	reference asset	kept: historical record of IGI locations
+docs/part2_analysis.md	204	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	kept: historical record of IGI locations
+docs/part2_analysis.md	288	/groups/rubin/projects/kuang/out/IS_cycle/	data root (IS_cycle)	kept: historical record of IGI locations
+environment.yml	647	/home/kuangh/miniconda3/envs/opfi	software environment	removed machine-specific prefix line; envs/ holds current exports
+notebooks/junction_reads.ipynb	22	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/check_data_structure.py	8	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/check_data_structure.py	9	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/check_data_structure.py	10	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/check_status.py	147	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/check_status.py	151	/home/kuangh/tools/Cycle/data/batches	code location	derived from the script location / CYCLE_ROOT
+scripts/combine_and_visualize.py	8	/groups/rubin/projects/kuang/out/IS_cycle/combined_006_010	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/combine_and_visualize.py	124	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/is110_build_json.py	16	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_build_json.py	22	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/is110_build_json.sh	3	/home/kuangh/logs/is110_json_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_build_json.sh	4	/home/kuangh/logs/is110_json_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_build_json.sh	6	--cpus-per-task=8	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_build_json.sh	7	--mem=64G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_build_json.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_build_json.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_build_json.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_build_json.sh	11	/home/kuangh/tools/Cycle/scripts/is110_build_json.py	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_collect_all.py	11	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_collect_all.py	16	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/is110_collect_all.sh	3	/home/kuangh/logs/is110_collect_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_collect_all.sh	4	/home/kuangh/logs/is110_collect_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_collect_all.sh	6	--cpus-per-task=8	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_collect_all.sh	7	--mem=64G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_collect_all.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_collect_all.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_collect_all.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_collect_all.sh	11	/home/kuangh/tools/Cycle/scripts/is110_collect_all.py	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_collect_simple.py	16	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_collect_simple.py	22	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/is110_collect_simple.sh	3	/home/kuangh/logs/is110_collect_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_collect_simple.sh	4	/home/kuangh/logs/is110_collect_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_collect_simple.sh	6	--cpus-per-task=8	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_collect_simple.sh	7	--mem=64G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_collect_simple.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_collect_simple.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_collect_simple.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_collect_simple.sh	11	/home/kuangh/tools/Cycle/scripts/is110_collect_simple.py	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_hmm_only.py	8	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_hmm_only.py	14	/groups/rubin/projects/kuang/out/IS_cycle/is110_all_006_026	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/is110_hmm_only.sh	3	/home/kuangh/logs/is110_hmm_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_hmm_only.sh	4	/home/kuangh/logs/is110_hmm_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_hmm_only.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_hmm_only.sh	7	--mem=64G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_hmm_only.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_hmm_only.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_hmm_only.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_hmm_only.sh	11	/home/kuangh/tools/Cycle/scripts/is110_hmm_only.py	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_run_all.sh	3	/home/kuangh/logs/is110_all_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_run_all.sh	4	/home/kuangh/logs/is110_all_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_run_all.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_run_all.sh	7	--mem=192G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_run_all.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_run_all.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_run_all.sh	11	/home/kuangh/tools/Cycle	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_run_all.sh	12	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/is110_run_all.sh	17	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_run_all.sh	59	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_run_all.sh	83	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_run_all.sh	90	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_run_all.sh	93	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_step345.py	10	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+scripts/is110_step345.py	16	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/is110_step345.sh	3	/home/kuangh/logs/is110_step345_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_step345.sh	4	/home/kuangh/logs/is110_step345_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+scripts/is110_step345.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_step345.sh	7	--mem=192G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+scripts/is110_step345.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_step345.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+scripts/is110_step345.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+scripts/is110_step345.sh	11	/home/kuangh/tools/Cycle/scripts/is110_step345.py	code location	derived from the script location / CYCLE_ROOT
+scripts/upload_batch_to_hf.py	45	/tmp/hf_staging	temporary directory	TMPDIR (upload_batch_to_hf.py); tests keep /tmp
+scripts/upload_batch_to_hf.py	82	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/visualize_guide12_30.py	23	/groups/rubin/projects/kuang/out/IS_cycle/batch_000/is_formatter_output	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/visualize_guide12_30.py	24	/groups/rubin/projects/kuang/out/IS_cycle/system_clustering_batch000/system_clusters_summary.tsv	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+scripts/visualize_guide12_30.py	25	/groups/rubin/projects/kuang/out/IS_cycle/visualizations_guide12_30	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/active_is110/collect_active_is110.py	19	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/active_is110/collect_active_is110.py	25	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/active_is110/collect_active_is110_000_094.py	9	/groups/rubin/projects/kuang/out/IS_cycle/active_is110_000_094/	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/active_is110/collect_active_is110_000_094.py	25	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/active_is110/collect_active_is110_000_094.py	31	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/active_is110/compare_junctions.py	13	/groups/rubin/projects/kuang/out/IS_cycle/active_is110	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/active_is110/extract_junctions.py	15	/groups/rubin/projects/kuang/out/IS_cycle/active_is110	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/active_is110/run_collect.sh	3	/home/kuangh/logs/active_is110_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/active_is110/run_collect.sh	4	/home/kuangh/logs/active_is110_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/active_is110/run_collect.sh	6	--cpus-per-task=8	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/active_is110/run_collect.sh	7	--mem=64G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/active_is110/run_collect.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/active_is110/run_collect.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/active_is110/run_collect.sh	10	--exclude=node-48-256g-2,node-48-256g-3,node-48-256g-8,node-48-256g-9,node-48-256g-12,node-48-256g-13,node-48-	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/active_is110/run_collect.sh	12	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/active_is110/run_collect.sh	12	/home/kuangh/tools/Cycle/sideproject/active_is110/collect_active_is110.py	code location	derived from the script location / CYCLE_ROOT
+sideproject/active_is110/run_comprehensive_is110.sh	3	/home/kuangh/logs/is110_comprehensive_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/active_is110/run_comprehensive_is110.sh	4	/home/kuangh/logs/is110_comprehensive_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/active_is110/run_comprehensive_is110.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/active_is110/run_comprehensive_is110.sh	7	--mem=192G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/active_is110/run_comprehensive_is110.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/active_is110/run_comprehensive_is110.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/active_is110/run_comprehensive_is110.sh	11	/home/kuangh/tools/Cycle	code location	derived from the script location / CYCLE_ROOT
+sideproject/active_is110/run_comprehensive_is110.sh	12	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/active_is110/run_comprehensive_is110.sh	17	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/active_is110/run_comprehensive_is110.sh	55	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/active_is110/run_comprehensive_is110.sh	79	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/active_is110/run_comprehensive_is110.sh	86	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/active_is110/run_comprehensive_is110.sh	89	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/build_gtdb_blastdb.sh	3	/home/kuangh/logs/gtdb_blastdb_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/build_gtdb_blastdb.sh	4	/home/kuangh/logs/gtdb_blastdb_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/build_gtdb_blastdb.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/build_gtdb_blastdb.sh	7	--mem=192G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/build_gtdb_blastdb.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/build_gtdb_blastdb.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/build_gtdb_blastdb.sh	10	--exclude=node-48-256g-2,node-48-256g-3,node-48-256g-8,node-48-256g-9,node-48-256g-12,node-48-256g-13,node-48-	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/build_gtdb_blastdb.sh	12	/groups/rubin/projects/kuang/db/gtdb_blastdb	reference asset	CYCLE_HMM_DIR / CYCLE_GTDB_GENOMES_DIR / CYCLE_GTDB_BLASTDB
+sideproject/is621_search/reprocess_long_is621.py	22	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/reprocess_long_is621.py	37	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/is621_search/run_is621_search.sh	3	/home/kuangh/logs/is621_search_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_is621_search.sh	4	/home/kuangh/logs/is621_search_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_is621_search.sh	6	--cpus-per-task=16	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_is621_search.sh	7	--mem=32G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_is621_search.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_is621_search.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_is621_search.sh	11	/groups/rubin/projects/kuang/out/IS_cycle/is621_search	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/is621_search/run_is621_search.sh	12	/home/kuangh/tools/Cycle/sideproject/is621_search/is621_query.faa	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/run_is621_search.sh	15	/groups/rubin/projects/kuang/out/IS_cycle/is110_all_006_070/all_proteins_hmm.faa	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/is621_search/run_reprocess.sh	3	/home/kuangh/logs/is621_reprocess_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_reprocess.sh	4	/home/kuangh/logs/is621_reprocess_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_reprocess.sh	6	--cpus-per-task=16	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_reprocess.sh	7	--mem=64G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_reprocess.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_reprocess.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_reprocess.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/is621_search/run_reprocess.sh	11	/home/kuangh/tools/Cycle/sideproject/is621_search/reprocess_long_is621.py	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/run_visualize.sh	3	/home/kuangh/logs/is621_long_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_visualize.sh	4	/home/kuangh/logs/is621_long_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_visualize.sh	6	--cpus-per-task=8	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_visualize.sh	7	--mem=32G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_visualize.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_visualize.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_visualize.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/is621_search/run_visualize.sh	11	/home/kuangh/tools/Cycle/sideproject/is621_search/visualize_long_is621.py	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/run_visualize_all.sh	3	/home/kuangh/logs/is621_all_long_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_visualize_all.sh	4	/home/kuangh/logs/is621_all_long_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/is621_search/run_visualize_all.sh	6	--cpus-per-task=8	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_visualize_all.sh	7	--mem=32G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/is621_search/run_visualize_all.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_visualize_all.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/is621_search/run_visualize_all.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/is621_search/run_visualize_all.sh	11	/home/kuangh/tools/Cycle/sideproject/is621_search/visualize_all_long_is621.py	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/visualize_all_long_is621.py	15	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/visualize_all_long_is621.py	23	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/is621_search/visualize_long_is621.py	19	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/visualize_long_is621.py	27	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/is621_search/visualize_reprocessed.py	15	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/is621_search/visualize_reprocessed.py	22	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/is621_search/visualize_reprocessed.py	25	/home/kuangh/tools/Cycle/sideproject/is621_search/is621_query.faa	code location	derived from the script location / CYCLE_ROOT
+sideproject/plot_split_example.py	10	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/plot_split_example.py	252	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/run_ecor_batch.sh	3	/home/kuangh/logs/ecor_batch_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_ecor_batch.sh	4	/home/kuangh/logs/ecor_batch_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_ecor_batch.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_ecor_batch.sh	7	--mem=192G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_ecor_batch.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_ecor_batch.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_ecor_batch.sh	11	/home/kuangh/tools/Cycle	code location	derived from the script location / CYCLE_ROOT
+sideproject/run_ecor_batch.sh	12	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/run_ecor_batch.sh	13	/groups/rubin/projects/kuang/out/IS110/ECOR_batch/fastq	side-project data (ECOR)	CYCLE_ECOR_DIR / site_config.ecor_dir()
+sideproject/run_ecor_batch.sh	14	/groups/rubin/projects/kuang/out/IS110/ECOR_batch/reference_genomes	side-project data (ECOR)	CYCLE_ECOR_DIR / site_config.ecor_dir()
+sideproject/run_ecor_batch.sh	15	/groups/rubin/projects/kuang/out/IS110/ECOR_batch/output	side-project data (ECOR)	CYCLE_ECOR_DIR / site_config.ecor_dir()
+sideproject/run_ecor_partial_circle.py	5	sys.path.insert(0, '/home/kuangh/tools/Cycle')	code location	derived from the script location / CYCLE_ROOT
+sideproject/run_ecor_partial_circle.py	25	/groups/rubin/projects/kuang/out/IS110/ECOR_batch/output	side-project data (ECOR)	CYCLE_ECOR_DIR / site_config.ecor_dir()
+sideproject/run_ecor_partial_circle.py	26	/groups/rubin/projects/kuang/out/IS110/ECOR_batch/fastq	side-project data (ECOR)	CYCLE_ECOR_DIR / site_config.ecor_dir()
+sideproject/run_ecor_partial_circle.sh	3	/home/kuangh/logs/ecor_pc_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_ecor_partial_circle.sh	4	/home/kuangh/logs/ecor_pc_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_ecor_partial_circle.sh	6	--cpus-per-task=16	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_ecor_partial_circle.sh	7	--mem=64G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_ecor_partial_circle.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_ecor_partial_circle.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_ecor_partial_circle.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/run_ecor_partial_circle.sh	11	/home/kuangh/tools/Cycle/sideproject/run_ecor_partial_circle.py	code location	derived from the script location / CYCLE_ROOT
+sideproject/run_is110_blastn.sh	3	/home/kuangh/logs/is110_blastn_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_is110_blastn.sh	4	/home/kuangh/logs/is110_blastn_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_is110_blastn.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_is110_blastn.sh	7	--mem=192G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_is110_blastn.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_is110_blastn.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_is110_blastn.sh	11	/groups/rubin/projects/kuang/db/gtdb_blastdb/gtdb_reps_r220	reference asset	CYCLE_HMM_DIR / CYCLE_GTDB_GENOMES_DIR / CYCLE_GTDB_BLASTDB
+sideproject/run_is110_blastn.sh	12	/groups/rubin/projects/kuang/out/IS_cycle/is110_all_006_026/is110_consensus.fna	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/run_is110_blastn.sh	13	/groups/rubin/projects/kuang/out/IS_cycle/is110_split_gtdb	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/run_is110_blastn.sh	33	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/run_is110_blastn.sh	33	/home/kuangh/tools/Cycle/sideproject/find_splits_from_blast.py	code location	derived from the script location / CYCLE_ROOT
+sideproject/run_plot_splits.sh	3	/home/kuangh/logs/plot_splits_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_plot_splits.sh	4	/home/kuangh/logs/plot_splits_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_plot_splits.sh	6	--cpus-per-task=4	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_plot_splits.sh	7	--mem=32G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_plot_splits.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_plot_splits.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_plot_splits.sh	11	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/run_plot_splits.sh	11	/home/kuangh/tools/Cycle/sideproject/plot_split_example.py	code location	derived from the script location / CYCLE_ROOT
+sideproject/run_split_finder.sh	3	/home/kuangh/logs/is110_split_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_split_finder.sh	4	/home/kuangh/logs/is110_split_	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+sideproject/run_split_finder.sh	6	--cpus-per-task=48	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_split_finder.sh	7	--mem=192G	scheduler: resources	kept in #SBATCH header (job needs); override with bin/cycle-sbatch ... --cpus-per-task=N; threads follow SLURM_CPUS_PER_TASK
+sideproject/run_split_finder.sh	8	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_split_finder.sh	9	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+sideproject/run_split_finder.sh	11	/home/kuangh/tools/Cycle	code location	derived from the script location / CYCLE_ROOT
+sideproject/run_split_finder.sh	12	conda run -n opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+sideproject/run_split_finder.sh	13	/groups/rubin/projects/kuang/out/IS_cycle/is110_all_006_026/is110_consensus.fna	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+sideproject/run_split_finder.sh	14	/groups/rubin/databases/GTDB/gtdb_genomes_v2024latest/gtdb_genomes_reps_r220/allfilestogether	reference asset	CYCLE_HMM_DIR / CYCLE_GTDB_GENOMES_DIR / CYCLE_GTDB_BLASTDB
+sideproject/run_split_finder.sh	15	/groups/rubin/projects/kuang/out/IS_cycle/is110_split_gtdb	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+submit_all.sh	60	/home/kuangh/tools/Cycle	code location	derived from the script location / CYCLE_ROOT
+submit_all.sh	69	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+submit_all.sh	70	$HOME/logs	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+submit_all.sh	73	CONDA_ENV=opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+submit_all.sh	124	/home/kuangh/miniconda3/envs/${CONDA_ENV}/bin	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+submit_all.sh	203	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_all.sh	204	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	71	/home/kuangh/tools/Cycle	code location	derived from the script location / CYCLE_ROOT
+submit_one_batch.sh	72	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	CYCLE_DATA_ROOT (shell) / cycle.site_config.data_root() (Python); IGI value is the default
+submit_one_batch.sh	76	$HOME/logs	log directory	CYCLE_LOG_DIR (submit scripts; bin/cycle-sbatch for #SBATCH scripts)
+submit_one_batch.sh	77	CONDA_ENV=opfi	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+submit_one_batch.sh	78	/home/kuangh/miniconda3/envs/${CONDA_ENV}/bin	software environment	CYCLE_CONDA_ENV / CYCLE_ENV_PREFIX
+submit_one_batch.sh	203	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	203	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	204	--cpus-per-task=48	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+submit_one_batch.sh	204	--mem=192G	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+submit_one_batch.sh	243	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	243	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	244	--cpus-per-task=48	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+submit_one_batch.sh	244	--mem=192G	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+submit_one_batch.sh	294	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	294	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	295	--cpus-per-task=48	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+submit_one_batch.sh	295	--mem=192G	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+submit_one_batch.sh	297	--exclude="node-48-256g-2,node-48-256g-3,node-48-256g-8,node-48-256g-9,node-48-256g-12,node-48-256g-13,node-48	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	323	--partition=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	323	--qos=standard	scheduler: site	CYCLE_SLURM_PARTITION / _QOS / _ACCOUNT / _AVX2_EXCLUDE via config/load_site.sh or bin/cycle-sbatch
+submit_one_batch.sh	324	--cpus-per-task=48	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+submit_one_batch.sh	324	--mem=192G	scheduler: resources	CYCLE_SLURM_CPUS / CYCLE_SLURM_MEM (submit_one_batch.sh); thread counts derived
+tests/test_reliability.py	263	/home/kuangh/tools/Cycle	code location	test now sets CYCLE_* variables instead of rewriting script text
+tests/test_reliability.py	264	/groups/rubin/projects/kuang/out/IS_cycle	data root (IS_cycle)	test now sets CYCLE_* variables instead of rewriting script text
+tests/test_reliability.py	266	$HOME/logs	log directory	test now sets CYCLE_* variables instead of rewriting script text

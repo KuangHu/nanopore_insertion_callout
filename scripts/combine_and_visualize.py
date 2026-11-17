@@ -5,7 +5,7 @@ generate PNG + GBK for each.
 Usage:
     python scripts/combine_and_visualize.py \
         --batches 6 7 8 9 10 \
-        --output-dir /groups/rubin/projects/kuang/out/IS_cycle/combined_006_010 \
+        --output-dir "$CYCLE_DATA_ROOT/combined_006_010" \
         --parallel 20
 """
 
@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cycle.visualizer.visualizer import ISElementVisualizer
 from cycle.visualizer.genbank import ISElementGenBank
+from cycle.site_config import data_root
 
 
 def load_partial_circles(batch_dirs):
@@ -121,7 +122,7 @@ def main():
                         help="Minimum longest ORF length in bp (default: 100)")
     args = parser.parse_args()
 
-    base = "/groups/rubin/projects/kuang/out/IS_cycle"
+    base = str(data_root())
     batch_dirs = [os.path.join(base, f"batch_{b:03d}") for b in args.batches]
 
     os.makedirs(args.output_dir, exist_ok=True)

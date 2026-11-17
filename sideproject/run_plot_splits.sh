@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=plot_splits
-#SBATCH --output=/home/kuangh/logs/plot_splits_%j.out
-#SBATCH --error=/home/kuangh/logs/plot_splits_%j.err
 #SBATCH --time=6:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --qos=standard
-#SBATCH --partition=standard
 
-conda run -n opfi python /home/kuangh/tools/Cycle/sideproject/plot_split_example.py
+# Site settings (partition/qos/account, log directory, data and asset paths) come from config/.
+# Submit with:  bin/cycle-sbatch sideproject/run_plot_splits.sh
+source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
+
+conda run -n "$CYCLE_CONDA_ENV" python $CYCLE_ROOT/sideproject/plot_split_example.py

@@ -1,0 +1,24 @@
+env	tool	version	provided_by	used_by
+opfi	python	3.12.3	conda (opfi)	all pipeline and analysis scripts
+opfi	minimap2	2.30-r1287	conda bioconda minimap2=2.30	align, circle bait mapping, formatter overlaps
+system	samtools	1.17 (htslib 1.17)	IGI system install /shared/software/bin/samtools (NOT in opfi)	align, circle detection, partial circle
+opfi	sniffles	2.7.2	conda bioconda sniffles=2.7.2	insertion calling
+opfi	kingfisher	0.4.1	conda (opfi)	SRA/ENA download (methods ena-ftp, aws-http, prefetch)
+opfi	sra-tools (prefetch, fasterq-dump)	3.2.1	conda (opfi)	kingfisher prefetch route
+opfi	aria2c	1.37.0	conda (opfi)	kingfisher ena-ftp route
+opfi	datasets (NCBI)	18.13.0	conda (opfi)	reference genome resolution
+opfi	miniasm	0.3-r179	conda (opfi)	formatter local assembly
+opfi	minipolish	0.2.0	conda (opfi)	formatter local assembly
+opfi	racon	1.5.0	conda bioconda racon=1.5.0	minipolish
+opfi	prodigal	2.6.3	conda bioconda prodigal=2.6.3	ORF annotation, IS110 collection
+opfi	hmmer	3.4	conda bioconda hmmer=3.4	IS110 filter (DEDD/Tnp20), Pfam scans
+opfi	mmseqs2	17.b804f	conda bioconda mmseqs2	system clustering (needs AVX2 nodes)
+opfi	blast	2.17.0+	conda bioconda blast=2.17.0	novelty annotator, side analyses
+opfi	exonerate	2.4.0	conda (opfi)	guide/annotation steps
+opfi	tldr	1.3.0	conda (opfi)	optional tldr insertion caller
+opfi	RNAfold (ViennaRNA)	2.7.0	conda (opfi)	guide RNA folding
+cresil	python	3.6.7	conda (cresil)	cycle_rna_analysis CReSIL/NanoCircle pipeline
+cresil	minimap2	2.17-r941	conda bioconda minimap2=2.17	cycle_rna_analysis broad-cycle mapping
+cresil	samtools	1.18	conda bioconda samtools=1.18 (prints libncurses warnings but runs)	cycle_rna_analysis
+cresil	flye	2.6	conda bioconda flye=2.6	CReSIL
+cresil	bedtools	2.31.1	conda bioconda bedtools=2.31.1	coverage tracks

@@ -1,0 +1,28 @@
+#!/bin/bash
+# Submit one of the standalone SLURM scripts (scripts/*.sh, sideproject/**/*.sh) with this site's
+# scheduler settings and log directory from config/ (see config/load_site.sh).
+#
+#   bin/cycle-sbatch [--needs-avx2] SCRIPT [extra sbatch options...]
+#
+# The job inherits CYCLE_ROOT and the other CYCLE_* variables, which the scripts use to find code,
+# data and the conda environment. Set CYCLE_DRY_RUN=1 to print the sbatch command instead.
+set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config/load_site.sh"
+
+avx2=()
+if [ "${1:-}" = "--needs-avx2" ]; then
+    shift
+    [ -n "${CYCLE_SLURM_AVX2_EXCLUDE:-}" ] && avx2=("--exclude=$CYCLE_SLURM_AVX2_EXCLUDE")
+fi
+script=${1:?usage: bin/cycle-sbatch [--needs-avx2] SCRIPT [sbatch options...]}
+shift
+name=$(basename "$script" .sh)
+mkdir -p "$CYCLE_LOG_DIR"
+cmd=(sbatch "${CYCLE_SBATCH_SITE[@]}" "${avx2[@]}"
+     --output="$CYCLE_LOG_DIR/${name}_%j.out" --error="$CYCLE_LOG_DIR/${name}_%j.err"
+     --export=ALL "$@" "$script")
+if [ -n "${CYCLE_DRY_RUN:-}" ]; then
+    printf '%q ' "${cmd[@]}"; echo
+else
+    exec "${cmd[@]}"
+fi

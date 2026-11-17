@@ -644,4 +644,3 @@ dependencies:
       - wrapt==1.16.0
       - xmltodict==1.0.2
       - xyzservices==2025.11.0
-prefix: /home/kuangh/miniconda3/envs/opfi
