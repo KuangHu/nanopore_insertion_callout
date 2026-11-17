@@ -33,6 +33,7 @@ See `docs/lawrence_setup.md` for configuring and running on Lawrencium.
 | IS_cycle external link targets | dereferenced copies of 220 symlinks in `is110_top20/` that pointed into a shared NCBI genome database |
 | cycle_rna_analysis | the sibling analysis project, per top-level folder |
 | IS110_downstream | the sibling project plus `out/is110_analysis` (target of two of its symlinks) |
+| ECOR_batch_core | `out/IS110/ECOR_batch` (`CYCLE_ECOR_DIR`): the 9 lab FASTQs, references and results; BAM, PAF, per-element `.fq` and `.mmi` intermediates (106 GB) are listed but not packaged |
 | assets | IS110 HMMs and `Pfam_transposase.hmm`, with original paths and checksums; checksum of the shared Pfam-A release |
 | code snapshot | byte-exact tarball of the IGI working tree before any migration change (including untracked files) |
 | environment inventory | `envs/` exports |
@@ -43,8 +44,10 @@ See `docs/lawrence_setup.md` for configuring and running on Lawrencium.
 Each component was checked independently of the code that built it: SHA-256 and `zstd -t` of every
 archive, extraction into a new directory, rebuilding per-batch reference files, re-hashing the
 restored tree with a separate inventory tool, and comparing every path, type, size, SHA-256, mode,
-symlink target and file mtime against an inventory of the source. A before/after source
-inventory confirms the sources did not change while being packaged.
+symlink target and file/symlink mtime (to the second, as tar stores it) against an inventory of the
+source. A before/after source inventory confirms the sources did not change while being packaged.
+The same restore-and-compare procedure is `verify_on_target.sh` in the bundle, for use after the
+transfer.
 
 ## Milestones
 
