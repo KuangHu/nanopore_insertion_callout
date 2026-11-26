@@ -14,7 +14,7 @@ OUT=$BASE/is110_all_006_052
 mkdir -p $OUT
 
 echo "=== Step 1: Build consensus FASTA from Sniffles ==="
-conda run -n "$CYCLE_CONDA_ENV" python -c "
+conda run -p "$CYCLE_ENV_PREFIX" python -c "
 import csv, glob, os
 csv.field_size_limit(10_000_000)
 BASE = '$BASE'
@@ -56,7 +56,7 @@ print(f'Total sequences: {n}')
 
 echo "=== Step 2: Parallel Prodigal (48 chunks) ==="
 mkdir -p $OUT/prodigal_chunks
-conda run -n "$CYCLE_CONDA_ENV" python -c "
+conda run -p "$CYCLE_ENV_PREFIX" python -c "
 fasta = '$OUT/all_consensus.fna'
 out_dir = '$OUT/prodigal_chunks'
 seqs = []
@@ -80,14 +80,14 @@ for i in range(48):
 for i in $(seq 0 47); do
     CHUNK=$OUT/prodigal_chunks/chunk_${i}.fna
     [ ! -f "$CHUNK" ] && continue
-    conda run -n "$CYCLE_CONDA_ENV" prodigal -i $CHUNK -a $OUT/prodigal_chunks/chunk_${i}.faa -o /dev/null -p meta -q &
+    conda run -p "$CYCLE_ENV_PREFIX" prodigal -i $CHUNK -a $OUT/prodigal_chunks/chunk_${i}.faa -o /dev/null -p meta -q &
 done
 wait
 cat $OUT/prodigal_chunks/chunk_*.faa > $OUT/all_proteins.faa
 echo "Proteins: $(grep -c '^>' $OUT/all_proteins.faa)"
 
 echo "=== Step 3: Parse + HMM ==="
-conda run -n "$CYCLE_CONDA_ENV" python -c "
+conda run -p "$CYCLE_ENV_PREFIX" python -c "
 import json, logging, os, sys
 from collections import defaultdict
 sys.path.insert(0, '$CYCLE_ROOT')

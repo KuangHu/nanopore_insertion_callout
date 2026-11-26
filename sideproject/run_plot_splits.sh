@@ -8,4 +8,4 @@
 # Submit with:  bin/cycle-sbatch sideproject/run_plot_splits.sh
 source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
 
-conda run -n "$CYCLE_CONDA_ENV" python $CYCLE_ROOT/sideproject/plot_split_example.py
+conda run -p "$CYCLE_ENV_PREFIX" python $CYCLE_ROOT/sideproject/plot_split_example.py

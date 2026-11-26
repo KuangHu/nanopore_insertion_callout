@@ -76,9 +76,11 @@ cp config/lawrencium.env.example config/site.env
 sinfo -p <partition> -o "%c %m %f" | sort -u                # cores / memory per node
 ```
 
-In `config/site.env` set `CYCLE_DATA_ROOT=$TARGET/data/IS_cycle`,
+In `config/site.env` set `CYCLE_ENV_PREFIX` to the environment's path (`conda env list` shows it),
+`CYCLE_DATA_ROOT=$TARGET/data/IS_cycle`,
 `CYCLE_HMM_DIR=$TARGET/data/assets/hmm`, `CYCLE_ECOR_DIR=$TARGET/data/ECOR_batch`, the Slurm
-account, partition and QOS, and cores/memory from the `sinfo` line.
+account, partition and QOS, and cores/memory from the `sinfo` line. Any required value left as
+`CHANGE_ME` stops every job script with a message naming it.
 
 ## 6. Lawrencium: test
 

@@ -30,7 +30,7 @@ echo "Unique IS110 with hits: $(cut -f1 $OUT_DIR/is110_vs_gtdb.tsv | sort -u | w
 echo "Unique genomes hit: $(cut -f2 $OUT_DIR/is110_vs_gtdb.tsv | sort -u | wc -l)"
 
 echo "=== Finding split hits ==="
-conda run -n "$CYCLE_CONDA_ENV" python $CYCLE_ROOT/sideproject/find_splits_from_blast.py \
+conda run -p "$CYCLE_ENV_PREFIX" python $CYCLE_ROOT/sideproject/find_splits_from_blast.py \
     --blast-results $OUT_DIR/is110_vs_gtdb.tsv \
     --output-dir $OUT_DIR
 
