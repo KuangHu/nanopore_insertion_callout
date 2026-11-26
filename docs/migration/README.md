@@ -47,7 +47,7 @@ restored tree with a separate inventory tool, and comparing every path, type, si
 symlink target and file/symlink mtime (to the second, as tar stores it) against an inventory of the
 source. A before/after source inventory confirms the sources did not change while being packaged.
 The same restore-and-compare procedure is `verify_on_target.sh` in the bundle, for use after the
-transfer.
+transfer. The transfer itself, step by step: `TRANSFER_STEPS.md`.
 
 ## Milestones
 
