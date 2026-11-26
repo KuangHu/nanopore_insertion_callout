@@ -35,6 +35,22 @@ export CYCLE_DATA_ROOT CYCLE_LOG_DIR CYCLE_CONDA_ENV CYCLE_ENV_PREFIX CYCLE_HMM_
        CYCLE_SLURM_ACCOUNT CYCLE_SLURM_PARTITION CYCLE_SLURM_QOS CYCLE_SLURM_CPUS CYCLE_SLURM_MEM \
        CYCLE_SLURM_AVX2_EXCLUDE CYCLE_SLURM_EXTRA
 
+# A value still holding the template's CHANGE_ME would be used as it stands (a PATH entry that does
+# not exist leaves jobs on the system python), so stop here. The two GTDB paths are needed by the
+# side project only and may stay unfilled.
+for _cycle_var in CYCLE_DATA_ROOT CYCLE_LOG_DIR CYCLE_CONDA_ENV CYCLE_ENV_PREFIX CYCLE_HMM_DIR \
+                  CYCLE_BATCH_METADATA_DIR CYCLE_ISFINDER_FASTA CYCLE_ECOR_DIR \
+                  CYCLE_SLURM_ACCOUNT CYCLE_SLURM_PARTITION CYCLE_SLURM_QOS CYCLE_SLURM_CPUS \
+                  CYCLE_SLURM_MEM CYCLE_SLURM_AVX2_EXCLUDE CYCLE_SLURM_EXTRA; do
+    case "${!_cycle_var:-}" in
+        *CHANGE_ME*)
+            echo "[cycle] $_cycle_var is not set for this site (still CHANGE_ME); edit config/site.env" >&2
+            unset _cycle_var
+            return 1 2>/dev/null || exit 1 ;;
+    esac
+done
+unset _cycle_var
+
 CYCLE_SBATCH_SITE=()
 [ -n "${CYCLE_SLURM_PARTITION:-}" ] && CYCLE_SBATCH_SITE+=("--partition=$CYCLE_SLURM_PARTITION")
 [ -n "${CYCLE_SLURM_QOS:-}" ] && CYCLE_SBATCH_SITE+=("--qos=$CYCLE_SLURM_QOS")

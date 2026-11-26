@@ -8,4 +8,4 @@
 # Submit with:  bin/cycle-sbatch --needs-avx2 sideproject/active_is110/run_collect.sh
 source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
 
-conda run -n "$CYCLE_CONDA_ENV" python $CYCLE_ROOT/sideproject/active_is110/collect_active_is110.py
+conda run -p "$CYCLE_ENV_PREFIX" python $CYCLE_ROOT/sideproject/active_is110/collect_active_is110.py

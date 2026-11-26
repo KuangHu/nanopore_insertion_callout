@@ -8,4 +8,4 @@
 # Submit with:  bin/cycle-sbatch scripts/is110_step345.sh
 source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
 
-conda run -n "$CYCLE_CONDA_ENV" python $CYCLE_ROOT/scripts/is110_step345.py
+conda run -p "$CYCLE_ENV_PREFIX" python $CYCLE_ROOT/scripts/is110_step345.py

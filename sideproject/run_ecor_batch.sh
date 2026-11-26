@@ -9,7 +9,7 @@
 source "${CYCLE_ROOT:?submit with bin/cycle-sbatch or export CYCLE_ROOT}/config/load_site.sh"
 
 cd "$CYCLE_ROOT"
-conda run -n "$CYCLE_CONDA_ENV" python sideproject/run_ecor_batch.py \
+conda run -p "$CYCLE_ENV_PREFIX" python sideproject/run_ecor_batch.py \
     --fastq-dir $CYCLE_ECOR_DIR/fastq \
     --ref-dir $CYCLE_ECOR_DIR/reference_genomes \
     --output-dir $CYCLE_ECOR_DIR/output \

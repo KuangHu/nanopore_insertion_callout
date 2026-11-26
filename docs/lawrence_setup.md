@@ -27,7 +27,7 @@ $EDITOR config/site.env                              # replace every CHANGE_ME
 |---|---|---|
 | `CYCLE_DATA_ROOT` | IS_cycle output tree | `/groups/rubin/projects/kuang/out/IS_cycle` |
 | `CYCLE_LOG_DIR` | SLURM stdout/stderr | `$HOME/logs` |
-| `CYCLE_CONDA_ENV`, `CYCLE_ENV_PREFIX` | conda env name and prefix (jobs prepend `$CYCLE_ENV_PREFIX/bin` to PATH) | `opfi`, `/home/kuangh/miniconda3/envs/opfi` |
+| `CYCLE_CONDA_ENV`, `CYCLE_ENV_PREFIX` | conda env name and prefix. Every job finds the environment by the prefix: the batch submitters prepend `$CYCLE_ENV_PREFIX/bin` to PATH and the standalone scripts use `conda run -p "$CYCLE_ENV_PREFIX"`; the name is informational | `opfi`, `/home/kuangh/miniconda3/envs/opfi` |
 | `CYCLE_HMM_DIR` | `DEDD.hmm`, `Tnp20.hmm` for the IS110 filter | `/home/kuangh/scripts/IS110/hmm` |
 | `CYCLE_ISFINDER_FASTA` | ISfinder reference for novelty annotation | `$CYCLE_DATA_ROOT/batch_000/is_reference/ISfinder_raw.fna` |
 | `CYCLE_BATCH_METADATA_DIR` | `batch_NNN.tsv` sample lists | `<repo>/data/batches` |
