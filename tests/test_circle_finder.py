@@ -58,7 +58,7 @@ class TestFindJunctionReads(unittest.TestCase):
             ],
         }
 
-    def _run(self, reads):
+    def _run(self, reads, trim_duplication=False):
         """Run _find_junction_reads with a list of mock reads."""
         mock_bam = MagicMock()
         mock_bam.fetch.return_value = reads
@@ -71,6 +71,7 @@ class TestFindJunctionReads(unittest.TestCase):
                 entries_by_uuid=self.entries_by_uuid,
                 junction_map=self.junction_map,
                 sample_id="sample1",
+                trim_duplication=trim_duplication,
             )
 
     def test_tail_head_spanning(self):
@@ -102,27 +103,42 @@ class TestFindJunctionReads(unittest.TestCase):
         self.element = "".join(rng.choice("ACGT") for _ in range(990))
         self.entry.consensus = "ACGTACGTAC" + self.element
 
+    def _duplication_reads(self, cigar, n):
+        return [_mock_read('is1__th__j1000', 800, 1210, cigar, query_name=f'r{i}') for i in range(n)]
+
     def test_junction_deletion_sets_the_element_ends(self):
         """Circle reads lack the duplicated bases at the bait junction; the element is cut back to its own ends."""
         self._duplication_entry()
-        reads = [_mock_read('is1__th__j1000', 800, 1210, [(0, 200), (2, 10), (0, 200)], query_name=f'r{i}')
-                 for i in range(3)]
-        _, summary = self._run(reads)
+        _, summary = self._run(self._duplication_reads([(0, 200), (2, 10), (0, 200)], 3), trim_duplication=True)
         self.assertEqual(summary['is1']['n_tail_head_reads'], 3)
         self.assertEqual(summary['is1']['target_duplication'], 10)
         self.assertEqual(summary['is1']['consensus'], self.element)
         self.assertEqual(summary['is1']['consensus_length'], 990)
-        self.assertEqual(summary['is1']['start'], 5010)
+        self.assertEqual((summary['is1']['start'], summary['is1']['end']), (5010, 6000))
 
     def test_junction_deletion_before_the_junction(self):
         """The same duplication, placed by the aligner on the other side of the junction, gives the rotated cut."""
         self._duplication_entry()
-        reads = [_mock_read('is1__th__j1000', 800, 1210, [(0, 190), (2, 10), (0, 210)], query_name=f'r{i}')
-                 for i in range(3)]
-        _, summary = self._run(reads)
+        _, summary = self._run(self._duplication_reads([(0, 190), (2, 10), (0, 210)], 3), trim_duplication=True)
         self.assertEqual(summary['is1']['target_duplication'], 10)
         self.assertEqual(summary['is1']['consensus'], self.entry.consensus[:990])
-        self.assertEqual(summary['is1']['start'], 5000)
+        self.assertEqual((summary['is1']['start'], summary['is1']['end']), (5000, 5990))
+
+    def test_duplication_is_recorded_but_not_cut_without_trimming(self):
+        """Without trimming (nanopore) the duplication length is reported and the call is left as it is."""
+        self._duplication_entry()
+        _, summary = self._run(self._duplication_reads([(0, 200), (2, 10), (0, 200)], 3))
+        self.assertEqual(summary['is1']['target_duplication'], 10)
+        self.assertEqual(summary['is1']['consensus'], self.entry.consensus)
+        self.assertEqual((summary['is1']['start'], summary['is1']['end']), (5000, 6000))
+
+    def test_two_reads_do_not_set_a_duplication(self):
+        """Fewer than three agreeing reads count as tail-head reads but record no duplication."""
+        self._duplication_entry()
+        _, summary = self._run(self._duplication_reads([(0, 200), (2, 10), (0, 200)], 2), trim_duplication=True)
+        self.assertEqual(summary['is1']['n_tail_head_reads'], 2)
+        self.assertEqual(summary['is1']['target_duplication'], '')
+        self.assertEqual(summary['is1']['consensus'], self.entry.consensus)
 
     def test_gap_free_junction_reads_keep_the_called_element(self):
         self._duplication_entry()

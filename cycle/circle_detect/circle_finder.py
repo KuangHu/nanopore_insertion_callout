@@ -26,6 +26,7 @@ from ..utils import find_fastq
 from .config import (
     DEFAULT_BOUNDARY_TOLERANCE,
     DEFAULT_MAX_TARGET_DUPLICATION,
+    DEFAULT_MIN_DUPLICATION_READS,
     DEFAULT_CIRCLE_OUTPUT_DIR,
     DEFAULT_MIN_CONSENSUS_ENTROPY,
     DEFAULT_MIN_CONSENSUS_LENGTH,
@@ -264,6 +265,7 @@ class CircleFinder:
         entries_by_uuid: dict[str, ISEntry],
         junction_map: dict[str, list[dict]],
         sample_id: str,
+        trim_duplication: bool = False,
     ) -> tuple[list[dict], dict[str, dict]]:
         """Scan BAM for reads spanning bait junctions.
 
@@ -390,16 +392,17 @@ class CircleFinder:
             # The insertion caller cannot tell the element from its target site duplication: it
             # reports the two together, so the bait junction holds the duplicated bases and reads
             # of the excised circle show them as a deletion. When most tail-head reads agree on
-            # one deletion, cut the consensus back to the element and move the position with it.
+            # one deletion, record its length; with ``trim_duplication`` also cut the consensus
+            # back to the element and move the position with it.
             consensus = entry.consensus
             shift = 0
             duplication = ""
             gaps = junction_gaps.get(uuid, [])
             if gaps:
                 duplication, votes = Counter(length for _, length in gaps).most_common(1)[0]
-                if votes * 2 <= len(gaps):
+                if votes < DEFAULT_MIN_DUPLICATION_READS or votes * 2 <= len(gaps):
                     duplication = ""
-                elif duplication:
+                elif duplication and trim_duplication:
                     gap_start = Counter(start for start, length in gaps if length == duplication).most_common(1)[0][0]
                     shift = gap_start + duplication - len(entry.consensus)
                     consensus = entry.consensus[shift:gap_start]
@@ -407,7 +410,7 @@ class CircleFinder:
                 "is_uuid": uuid,
                 "chrom": entry.chrom,
                 "start": entry.start + shift,
-                "end": entry.end + shift - (duplication or 0),
+                "end": entry.end + len(consensus) - len(entry.consensus) + shift,
                 "family": entry.family,
                 "subfamily": entry.subfamily,
                 "consensus_length": len(consensus),
@@ -466,6 +469,7 @@ class CircleFinder:
         sample_id: str,
         fastq_path: Path,
         ref_fasta: Path | None = None,
+        trim_duplication: bool = False,
     ) -> Optional[Path]:
         """Run circle detection for one sample.
 
@@ -474,6 +478,8 @@ class CircleFinder:
             sample_id: Sample accession.
             fastq_path: Path to the sample's FASTQ file.
             ref_fasta: Accepted for backward compatibility but ignored.
+            trim_duplication: Cut a target site duplication seen in the junction
+                reads out of the consensus. Only safe when the consensus is accurate.
 
         Returns:
             Path to the sample output directory, or ``None`` on failure.
@@ -503,7 +509,7 @@ class CircleFinder:
             return None
 
         junction_reads, summary_by_uuid = self._find_junction_reads(
-            bam, entries_by_uuid, junction_map, sample_id,
+            bam, entries_by_uuid, junction_map, sample_id, trim_duplication,
         )
 
         logger.info(
@@ -565,7 +571,7 @@ class CircleFinder:
         results: dict[str, Optional[Path]] = {}
 
         # Collect tasks
-        tasks: list[tuple[str, Path, Path, Path | None]] = []
+        tasks: list[tuple[str, Path, Path, Path | None, bool]] = []
         for _, row in metadata.iterrows():
             sid = row[accession_col]
             table_path = tldr_results.get(sid)
@@ -586,18 +592,21 @@ class CircleFinder:
             if ref_map:
                 ref_fasta = ref_map.get(sid)
 
-            tasks.append((sid, fq, table_path, ref_fasta))
+            # Nanopore consensus sequences are too rough to cut by a few bases.
+            trim = row.get("platform") == "PACBIO_SMRT"
+            tasks.append((sid, fq, table_path, ref_fasta, trim))
 
         logger.info(f"Running circle detection for {len(tasks)} samples")
 
         if parallel <= 1:
-            for sid, fq, table_path, ref_fasta in tasks:
+            for sid, fq, table_path, ref_fasta, trim in tasks:
                 try:
                     out = self.run_sample(
                         tldr_table=table_path,
                         sample_id=sid,
                         fastq_path=fq,
                         ref_fasta=ref_fasta,
+                        trim_duplication=trim,
                     )
                     results[sid] = out
                 except Exception as exc:
@@ -609,13 +618,14 @@ class CircleFinder:
             logger.info(f"Running {len(tasks)} samples with {parallel} in parallel")
             with ProcessPoolExecutor(max_workers=parallel) as pool:
                 futures = {}
-                for sid, fq, table_path, ref_fasta in tasks:
+                for sid, fq, table_path, ref_fasta, trim in tasks:
                     fut = pool.submit(
                         _run_circle_worker,
                         sample_id=sid,
                         fastq_path=fq,
                         table_path=table_path,
                         ref_fasta=ref_fasta,
+                        trim_duplication=trim,
                         output_dir=self.output_dir,
                         threads=self.threads,
                         sort_memory=self.sort_memory,
@@ -659,6 +669,7 @@ def _run_circle_worker(
     boundary_tolerance: int = DEFAULT_BOUNDARY_TOLERANCE,
     min_consensus_entropy: float = DEFAULT_MIN_CONSENSUS_ENTROPY,
     flank_length: int | None = None,  # deprecated, ignored
+    trim_duplication: bool = False,
 ) -> Optional[Path]:
     """Standalone worker function for parallel circle detection."""
     finder = CircleFinder(
@@ -675,6 +686,7 @@ def _run_circle_worker(
         sample_id=sample_id,
         fastq_path=fastq_path,
         ref_fasta=ref_fasta,
+        trim_duplication=trim_duplication,
     )
 
 
