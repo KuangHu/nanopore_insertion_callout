@@ -172,6 +172,12 @@ class TestCompleteBoundary(TemporaryTest):
     def test_full_reverse_and_internal_indel(self):
         self.assertEqual(self.locate((16, 60, '500M10I490M')), (100, 1090, '-'))
 
+    def test_short_end_clip_extends_the_element(self):
+        # The called consensus may be noisy over its first or last few bases.
+        self.assertEqual(self.locate((0, 60, '9S991M')), (91, 1091, '+'))
+        self.assertEqual(self.locate((16, 60, '9S991M')), (91, 1091, '-'))
+        self.assertIsNone(self.locate((0, 60, '21S979M')))
+
     def test_unknown_or_zero_mapping_confidence(self):
         for mapq in (0, 255):
             self.assertIsNone(self.locate((0, mapq, '1000M')))

@@ -29,6 +29,7 @@ from .config import (
     DEFAULT_MIN_READS_FOR_ASSEMBLY,
     COPY_MIN_COVERAGE,
     COPY_MIN_IDENTITY,
+    MAX_END_CLIP,
     MAX_FALLBACK_READS,
     MAX_OVERHANG,
     POLISH_PAD,
@@ -402,23 +403,33 @@ class ISFormatter:
 
             # A local match cannot define both ends of the full insertion.
             # Require a complete primary query alignment with known mapping
-            # confidence. Reject clipped/split candidates rather than silently
-            # exporting their aligned subinterval as the complete element.
+            # confidence. Reject split candidates and clips longer than
+            # MAX_END_CLIP rather than exporting a subinterval as the element.
+            # A short soft clip is the noisy end of the called consensus: the
+            # element is extended over the same number of contig bases.
             operations = re.findall(r"(\d+)([MIDNSHP=X])", cigar)
             if not operations or "".join(n + op for n, op in operations) != cigar:
                 continue
-            if mapq == 0 or mapq == 255 or any(op in "SHN" for _, op in operations):
+            left_clip = int(operations[0][0]) if operations[0][1] == "S" else 0
+            right_clip = int(operations[-1][0]) if operations[-1][1] == "S" and len(operations) > 1 else 0
+            inner = operations[(1 if left_clip else 0):len(operations) - (1 if right_clip else 0)]
+            if mapq == 0 or mapq == 255 or any(op in "SHN" for _, op in inner):
                 continue
-            query_len = sum(int(n) for n, op in operations if op in "MI=X")
+            if left_clip > MAX_END_CLIP or right_clip > MAX_END_CLIP:
+                continue
+            query_len = sum(int(n) for n, op in operations if op in "MIS=X")
             if query_len != len(consensus_seq):
                 continue
-            if operations[0][1] not in "M=X" or operations[-1][1] not in "M=X":
+            if inner[0][1] not in "M=X" or inner[-1][1] not in "M=X":
                 continue
 
             # Calculate alignment length from CIGAR
             ref_len = sum(
                 int(n) for n, op in re.findall(r"(\d+)([MDNX=])", cigar)
             )
+            # SAM gives the CIGAR along the contig, so a left clip lies before pos on either strand
+            pos -= left_clip
+            ref_len += left_clip + right_clip
             if pos < 0 or ref_len <= 0 or pos + ref_len > len(contig_seq):
                 continue
 
