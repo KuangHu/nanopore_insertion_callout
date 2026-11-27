@@ -9,6 +9,7 @@ the whole data root. Writes to OUTDIR:
   hard_clips.tsv      supplementary records with a hard clip, per BAM
   guide_lengths.tsv   guide hit counts by orientation and length
   strands.tsv         formatter records by strand
+  methods.tsv         formatter records by platform, assembly method and empty sequence
   samples.tsv         one row per sample: files found, validity, record counts
   references.tsv      reference used for each aligned sample
   batches.tsv         finished samples per batch table (only with --tables)
@@ -42,6 +43,11 @@ def sample_of(path):
 
 
 samples = {}
+platform = {}
+if args.tables:
+    for table in sorted(args.tables.glob("batch_*.tsv")):
+        for line in csv.DictReader(open(table), delimiter="\t"):
+            platform[line["srr_accession"]] = line.get("platform", "")
 
 
 def row(sample):
@@ -70,6 +76,7 @@ write("hard_clips.tsv", ["bam_kind", "sample", "records", "supplementary", "supp
 # 2 and 3. Guide lengths by orientation, formatter strands; JSON validity
 guide_counts = Counter()
 strand_counts = Counter()
+method_counts = Counter()
 for path in sorted(args.root.glob("**/is_formatter_output/*/*_is_records.json")):
     sample = sample_of(path)
     try:
@@ -82,6 +89,8 @@ for path in sorted(args.root.glob("**/is_formatter_output/*/*_is_records.json"))
     row(sample)["records_with_sequence"] = sum(1 for r in records if r["is_element"]["sequence"])
     for record in records:
         strand_counts[(record.get("assembly_method"), record["is_element"].get("strand"))] += 1
+        method_counts[(platform.get(sample, ""), record.get("assembly_method"),
+                       "empty" if not record["is_element"]["sequence"] else "present")] += 1
 for path in sorted(args.root.glob("**/is_formatter_output/*/*_is_records_annotated.json")):
     try:
         json.load(open(path))
@@ -104,6 +113,9 @@ write("guide_lengths.tsv", ["orientation", "length", "mismatches", "hits"],
       [[*key, n] for key, n in sorted(guide_counts.items())])
 write("strands.tsv", ["assembly_method", "strand", "records"],
       [[*key, n] for key, n in sorted(strand_counts.items(), key=str)])
+
+write("methods.tsv", ["platform", "assembly_method", "sequence", "records"],
+      [[*key, n] for key, n in sorted(method_counts.items(), key=str)])
 
 # 4. Completeness of each sample's files
 for path in sorted(args.root.glob("**/sra_downloads/download_status.tsv")):
