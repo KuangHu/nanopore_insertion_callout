@@ -51,10 +51,16 @@ def upload_batch(repo_id: str, batch_dir: Path, batch_name: str):
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
 
-    for sub in ["is_formatter_output", "partial_circle_output", "sniffles_output"]:
-        src = batch_dir / sub
-        if src.exists():
-            (staging / sub).symlink_to(src)
+    # The Hub client does not follow directory symlinks, so every file is linked on its own.
+    # Sniffles calls may sit at the batch level or under chunks/chunk_N/.
+    sources = [batch_dir / sub for sub in ("is_formatter_output", "partial_circle_output", "sniffles_output")]
+    sources += sorted((batch_dir / "chunks").glob("chunk_*/sniffles_output"))
+    for src in sources:
+        for path in src.rglob("*"):
+            if path.is_file() and "assembly" not in path.relative_to(src).parts and not path.name.endswith((".bam", ".bai")):
+                dst = staging / path.relative_to(batch_dir)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.symlink_to(path)
 
     meta = batch_dir / "metadata_for_sniffles.tsv"
     if meta.exists():
@@ -64,7 +70,7 @@ def upload_batch(repo_id: str, batch_dir: Path, batch_name: str):
     chunks_src = batch_dir / "chunks"
     if chunks_src.exists():
         chunks_dst = staging / "chunks"
-        chunks_dst.mkdir()
+        chunks_dst.mkdir(exist_ok=True)
         for tsv in chunks_src.glob("*_all.tsv"):
             (chunks_dst / tsv.name).symlink_to(tsv)
 
