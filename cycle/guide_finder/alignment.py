@@ -6,8 +6,6 @@ between-sequence methods needed for guide RNA detection.
 
 from __future__ import annotations
 
-from typing import Optional
-
 
 _COMP = str.maketrans("ACGTacgt", "TGCAtgca")
 
@@ -96,124 +94,68 @@ class ShortAlignmentFinder:
         sequence1 = sequence1.upper()
         sequence2 = sequence2.upper()
 
-        seeds = self._find_seed_matches_between(sequence1, sequence2)
+        found = []
+        if self.check_forward:
+            found += self._scan_diagonals(sequence1, sequence2, "forward")
+        if self.check_revcomp:
+            # Compare with the reverse complement, then give positions on sequence2 itself
+            for hit in self._scan_diagonals(sequence1, reverse_complement(sequence2), "reverse_complement"):
+                hit["pos2"] = len(sequence2) - hit["pos2"] - hit["length"]
+                hit["seq2"] = sequence2[hit["pos2"]:hit["pos2"] + hit["length"]]
+                found.append(hit)
 
-        extended = []
-        for seed in seeds:
-            ext = self._extend_match_between(sequence1, sequence2, seed)
-            if ext and self._passes_mismatch_filter(ext["length"], ext["mismatches"]):
-                extended.append(ext)
-
-        consolidated = self._consolidate_matches_between(extended)
+        consolidated = self._consolidate_matches_between(found)
         consolidated.sort(key=lambda x: (x["pos1"], x["pos2"]))
         return consolidated
 
     # ------------------------------------------------------------------
-    # Seed finding
+    # Diagonal scan
     # ------------------------------------------------------------------
 
-    def _find_seed_matches_between(
-        self, sequence1: str, sequence2: str
-    ) -> list[dict]:
-        seeds: list[dict] = []
-        len1 = len(sequence1)
-        len2 = len(sequence2)
-        ml = self.min_length
+    def _scan_diagonals(self, sequence1: str, sequence2: str, orientation: str) -> list[dict]:
+        """All ungapped alignments of the two sequences that pass the tiered rule.
 
-        for i in range(len1 - ml + 1):
-            kmer = sequence1[i : i + ml]
-
-            if self.check_forward:
-                for j in range(len2 - ml + 1):
-                    target = sequence2[j : j + ml]
-                    mm, mm_pos = self._count_mismatches(kmer, target)
-                    if mm == 0:
-                        seeds.append(
-                            {
-                                "pos1": i,
-                                "pos2": j,
-                                "length": ml,
-                                "orientation": "forward",
-                                "mismatches": mm,
-                                "mismatch_positions": mm_pos,
-                            }
-                        )
-
-            if self.check_revcomp:
-                kmer_rc = reverse_complement(kmer)
-                for j in range(len2 - ml + 1):
-                    target = sequence2[j : j + ml]
-                    mm, mm_pos = self._count_mismatches(kmer_rc, target)
-                    if mm == 0:
-                        seeds.append(
-                            {
-                                "pos1": i,
-                                "pos2": j,
-                                "length": ml,
-                                "orientation": "reverse_complement",
-                                "mismatches": mm,
-                                "mismatch_positions": mm_pos,
-                            }
-                        )
-
-        return seeds
-
-    # ------------------------------------------------------------------
-    # Extension
-    # ------------------------------------------------------------------
-
-    def _extend_match_between(
-        self, sequence1: str, sequence2: str, seed: dict
-    ) -> Optional[dict]:
-        pos1 = seed["pos1"]
-        pos2 = seed["pos2"]
-        length = seed["length"]
-        orientation = seed["orientation"]
-
-        # Extend right
-        while pos1 + length < len(sequence1) and pos2 + length < len(sequence2):
-            test_s1 = sequence1[pos1 : pos1 + length + 1]
-            test_s2_raw = sequence2[pos2 : pos2 + length + 1]
-            test_s2 = test_s2_raw if orientation == "forward" else reverse_complement(test_s2_raw)
-
-            mm, _ = self._count_mismatches(test_s1, test_s2)
-            if mm <= self.max_mismatches:
-                length += 1
-            else:
-                break
-
-        # Extend left
-        while pos1 > 0 and pos2 > 0:
-            test_s1 = sequence1[pos1 - 1 : pos1 + length]
-            test_s2_raw = sequence2[pos2 - 1 : pos2 + length]
-            test_s2 = test_s2_raw if orientation == "forward" else reverse_complement(test_s2_raw)
-
-            mm, _ = self._count_mismatches(test_s1, test_s2)
-            if mm <= self.max_mismatches:
-                pos1 -= 1
-                pos2 -= 1
-                length += 1
-            else:
-                break
-
-        if length < self.min_length:
-            return None
-
-        seq1 = sequence1[pos1 : pos1 + length]
-        seq2_raw = sequence2[pos2 : pos2 + length]
-        seq2_cmp = seq2_raw if orientation == "forward" else reverse_complement(seq2_raw)
-        mismatches, mismatch_positions = self._count_mismatches(seq1, seq2_cmp)
-
-        return {
-            "pos1": pos1,
-            "pos2": pos2,
-            "length": length,
-            "seq1": seq1,
-            "seq2": seq2_raw,
-            "mismatches": mismatches,
-            "mismatch_positions": mismatch_positions,
-            "orientation": orientation,
-        }
+        Every offset between the sequences is one diagonal. On a diagonal the
+        mismatch positions cut it into exact runs; a window may span up to
+        max_mismatches of them. Each longest window that starts and ends on a
+        match is reported if it passes the rule, and so is each exact run that
+        is long enough by itself, because a run can pass where the longer
+        window around it, with its mismatch, is too short for the mismatch tier.
+        """
+        hits = []
+        len1, len2 = len(sequence1), len(sequence2)
+        for offset in range(-(len1 - 1), len2):
+            start1 = max(0, -offset)
+            start2 = start1 + offset
+            size = min(len1 - start1, len2 - start2)
+            if size < self.min_length:
+                continue
+            mismatches = [i for i in range(size) if sequence1[start1 + i] != sequence2[start2 + i]]
+            bounds = [-1] + mismatches + [size]
+            windows = set()
+            for i in range(len(bounds) - 1):
+                windows.add((bounds[i] + 1, bounds[i + 1]))  # exact run
+                windows.add((bounds[i] + 1, bounds[min(i + 1 + self.max_mismatches, len(bounds) - 1)]))
+            for begin, end in windows:
+                # Trim mismatches from the ends (two neighbouring mismatches leave one there)
+                while begin < end and sequence1[start1 + begin] != sequence2[start2 + begin]:
+                    begin += 1
+                while end > begin and sequence1[start1 + end - 1] != sequence2[start2 + end - 1]:
+                    end -= 1
+                inside = [m - begin for m in mismatches if begin <= m < end]
+                if not self._passes_mismatch_filter(end - begin, len(inside)):
+                    continue
+                hits.append({
+                    "pos1": start1 + begin,
+                    "pos2": start2 + begin,
+                    "length": end - begin,
+                    "seq1": sequence1[start1 + begin:start1 + end],
+                    "seq2": sequence2[start2 + begin:start2 + end],
+                    "mismatches": len(inside),
+                    "mismatch_positions": inside,
+                    "orientation": orientation,
+                })
+        return hits
 
     # ------------------------------------------------------------------
     # Consolidation
@@ -256,13 +198,3 @@ class ShortAlignmentFinder:
     @staticmethod
     def _regions_overlap(s1: int, e1: int, s2: int, e2: int) -> bool:
         return not (e1 <= s2 or e2 <= s1)
-
-    @staticmethod
-    def _count_mismatches(seq1: str, seq2: str) -> tuple[int, list[int]]:
-        mm = 0
-        positions: list[int] = []
-        for i, (a, b) in enumerate(zip(seq1, seq2)):
-            if a != b:
-                mm += 1
-                positions.append(i)
-        return mm, positions
