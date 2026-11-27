@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import subprocess
@@ -226,9 +227,15 @@ class SystemClusterer:
         prefix = cluster_dir / "clust"
         tsv_path = Path(f"{prefix}_cluster.tsv")
 
-        if tsv_path.exists():
-            log.info("MMseqs2 cluster TSV already exists — reusing")
+        # The result belongs to one protein set and one set of parameters: reuse it only for those.
+        key_path = Path(f"{prefix}_cluster.key")
+        key = hashlib.sha256(
+            fasta_path.read_bytes() + f"|{self.min_seq_id}|{self.coverage}|{self.cov_mode}".encode()
+        ).hexdigest()
+        if tsv_path.exists() and key_path.exists() and key_path.read_text() == key:
+            log.info("MMseqs2 cluster TSV for these proteins already exists — reusing")
         else:
+            key_path.unlink(missing_ok=True)
             with tempfile.TemporaryDirectory() as tmpdir:
                 cmd = [
                     "mmseqs", "easy-cluster",
@@ -245,6 +252,7 @@ class SystemClusterer:
                 if ret.returncode != 0:
                     log.error("MMseqs2 stderr:\n%s", ret.stderr)
                     raise RuntimeError(f"MMseqs2 failed (exit {ret.returncode})")
+            key_path.write_text(key)
 
         # Parse cluster TSV: representative\tmember
         orf_to_family: dict[str, str] = {}

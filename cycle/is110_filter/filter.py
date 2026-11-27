@@ -154,11 +154,11 @@ class IS110Filter:
         """Check if any DEDD ORF is adjacent to any Tnp20 ORF (gap <= max_orf_gap)."""
         for _, ds, de, _ in dedd_orfs:
             for _, ts, te, _ in tnp20_orfs:
-                # Gap between the two ORFs (0 if overlapping)
-                if de <= ts:
-                    gap = ts - de
-                elif te <= ds:
-                    gap = ds - te
+                # Bases between the two ORFs (0 if overlapping); coordinates are 1-based inclusive
+                if de < ts:
+                    gap = ts - de - 1
+                elif te < ds:
+                    gap = ds - te - 1
                 else:
                     gap = 0  # overlapping
                 if gap <= self.max_orf_gap:
@@ -253,14 +253,16 @@ class IS110Filter:
         without_circle = []
         seen_ids: Set[str] = set()
 
-        # Pass 1: guide JSONs — these have circle evidence (TH > 0)
+        # Guide JSONs first, then annotated JSONs for records that have no guide JSON.
+        # Both are judged the same way: tail-head reads or a partial circle is circle evidence.
         guide_files = sorted(glob(os.path.join(formatter_dir, "*", "*_is_records_guide.json")))
-        for jf in guide_files:
+        ann_files = sorted(glob(os.path.join(formatter_dir, "*", "*_is_records_annotated.json")))
+        for jf in guide_files + ann_files:
             with open(jf) as f:
                 records = json.load(f)
             for rec in records:
                 is_id = rec.get("is_id", "")
-                if is_id not in is110_ids:
+                if is_id not in is110_ids or is_id in seen_ids:
                     continue
                 if trans_domains:
                     self._annotate_orf_domains(rec, trans_domains)
@@ -270,26 +272,6 @@ class IS110Filter:
                 has_partial = is_id in partial_circle_ids
                 if has_full or has_partial:
                     rec["_circle_type"] = "full" if has_full else "partial"
-                    with_circle.append(rec)
-                else:
-                    rec["_circle_type"] = "none"
-                    without_circle.append(rec)
-                seen_ids.add(is_id)
-
-        # Pass 2: annotated JSONs — pick up IS110 records excluded by TH filter
-        ann_files = sorted(glob(os.path.join(formatter_dir, "*", "*_is_records_annotated.json")))
-        for jf in ann_files:
-            with open(jf) as f:
-                records = json.load(f)
-            for rec in records:
-                is_id = rec.get("is_id", "")
-                if is_id not in is110_ids or is_id in seen_ids:
-                    continue
-                if trans_domains:
-                    self._annotate_orf_domains(rec, trans_domains)
-                # Check if partial circle gives it circle evidence
-                if is_id in partial_circle_ids:
-                    rec["_circle_type"] = "partial"
                     with_circle.append(rec)
                 else:
                     rec["_circle_type"] = "none"
@@ -311,16 +293,21 @@ class IS110Filter:
         if not domains_info:
             return
 
+        # The domain search may have run on another version of the element's sequence than the
+        # one the record's ORFs were called on, so coordinates can differ by a few bases: an
+        # ORF takes the domains of a hit on its strand that covers at least half of the shorter.
         orfs = (rec.get("orf_annotation") or {}).get("orfs", [])
-        coord_domains: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for domain_name in ("DEDD", "Tnp20"):
-            for _prot_id, start, end, _strand in domains_info.get(domain_name, []):
-                coord_domains[(start, end)].append(domain_name)
-
-        for orf in orfs:
-            orf_key = (orf["start"], orf["end"])
-            if orf_key in coord_domains:
-                orf["domains"] = sorted(set(coord_domains[orf_key]))
+            for prot_id, start, end, strand in domains_info.get(domain_name, []):
+                matched = False
+                for orf in orfs:
+                    shared = min(end, orf["end"]) - max(start, orf["start"]) + 1
+                    shorter = min(end - start, orf["end"] - orf["start"]) + 1
+                    if orf.get("strand") == strand and shared * 2 >= shorter:
+                        orf["domains"] = sorted(set(orf.get("domains", [])) | {domain_name})
+                        matched = True
+                if not matched:
+                    logger.warning("%s hit %s matches no ORF of record %s", domain_name, prot_id, is_id)
 
     # ------------------------------------------------------------------
     # Step 5: export

@@ -1,6 +1,7 @@
 """BLAST IS elements against ISfinder and score cluster novelty."""
 
 import csv
+import hashlib
 import json
 import logging
 import re
@@ -177,10 +178,14 @@ class NoveltyAnnotator:
     def _build_blastdb(self, fasta: Path) -> Path:
         """Build a BLAST nucleotide DB (skip if cached)."""
         db_prefix = self.output_dir / "isfinder_blastdb"
-        nhr = Path(f"{db_prefix}.nhr")
-        if nhr.exists():
+        # The database belongs to one FASTA: reuse it only for the same content, and only whole.
+        key_path = Path(f"{db_prefix}.source")
+        key = hashlib.sha256(Path(fasta).read_bytes()).hexdigest()
+        files = [Path(f"{db_prefix}{suffix}") for suffix in (".nhr", ".nin", ".nsq")]
+        if all(f.exists() for f in files) and key_path.exists() and key_path.read_text() == key:
             logger.info("Using cached BLAST DB: %s", db_prefix)
             return db_prefix
+        key_path.unlink(missing_ok=True)
 
         cmd = [
             "makeblastdb",
@@ -190,6 +195,7 @@ class NoveltyAnnotator:
         ]
         logger.info("Building BLAST DB: %s", " ".join(cmd))
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
+        key_path.write_text(key)
         logger.info("BLAST DB ready: %s", db_prefix)
         return db_prefix
 
@@ -265,6 +271,8 @@ class NoveltyAnnotator:
         out_path = self.output_dir / "blast_results.tsv"
         cmd = [
             "blastn",
+            # megablast, the default, misses hits far below 95% identity, which the score needs
+            "-task", "blastn",
             "-query", str(query),
             "-db", str(db),
             "-outfmt", self._BLAST_OUTFMT,

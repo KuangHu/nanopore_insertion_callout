@@ -331,6 +331,15 @@ class NestingDetector:
                     sub_blocks = self._decompose_cigar(
                         cigar, query_start, target_start, strand,
                     )
+                    if strand == "-":
+                        # The CIGAR follows the target, so on the minus strand it walks the
+                        # query interval from its end: mirror the blocks inside that interval.
+                        query_end = int(fields[3])
+                        for blk in sub_blocks:
+                            blk.query_start, blk.query_end = (
+                                query_start + query_end - blk.query_end,
+                                query_start + query_end - blk.query_start,
+                            )
                 else:
                     # No CIGAR — use the whole alignment as one block
                     sub_blocks = [AlignmentBlock(
