@@ -23,12 +23,11 @@ fasta = f'{OUT}/all_consensus.fna'
 n = 0
 with open(fasta, 'w') as fout:
     for b in range(6, 53):
-        found = False
-        # Try top-level sniffles_output
-        snif_dir = f'{BASE}/batch_{b:03d}/sniffles_output'
-        if os.path.isdir(snif_dir):
-            for sd in os.listdir(snif_dir):
-                tf = os.path.join(snif_dir, sd, f'{sd}.table.txt')
+        # Both layouts: a batch may hold a top-level sniffles_output and chunk-level ones
+        dirs = [f'{BASE}/batch_{b:03d}/sniffles_output'] + sorted(glob.glob(f'{BASE}/batch_{b:03d}/chunks/chunk_*/sniffles_output'))
+        for cdir in [d for d in dirs if os.path.isdir(d)]:
+            for sd in os.listdir(cdir):
+                tf = os.path.join(cdir, sd, f'{sd}.table.txt')
                 if not os.path.exists(tf): continue
                 with open(tf) as f:
                     reader = csv.DictReader(f, delimiter='\t')
@@ -37,20 +36,6 @@ with open(fasta, 'w') as fout:
                         if len(seq) >= 500:
                             fout.write(f'>{row[\"UUID\"]}\n{seq}\n')
                             n += 1
-            found = True
-        # Try chunk-level sniffles_output
-        if not found:
-            for cdir in sorted(glob.glob(f'{BASE}/batch_{b:03d}/chunks/chunk_*/sniffles_output')):
-                for sd in os.listdir(cdir):
-                    tf = os.path.join(cdir, sd, f'{sd}.table.txt')
-                    if not os.path.exists(tf): continue
-                    with open(tf) as f:
-                        reader = csv.DictReader(f, delimiter='\t')
-                        for row in reader:
-                            seq = row.get('Consensus', '')
-                            if len(seq) >= 500:
-                                fout.write(f'>{row[\"UUID\"]}\n{seq}\n')
-                                n += 1
 print(f'Total sequences: {n}')
 "
 

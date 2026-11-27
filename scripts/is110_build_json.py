@@ -108,12 +108,10 @@ for b in range(6, 53):
 sniffles_records = {}
 empty_ids = {i for i, r in formatter_records.items() if not r["is_element"]["sequence"]}
 for b in range(6, 53):
-    snif_dir = f"{BASE}/batch_{b:03d}/sniffles_output"
+    # Both layouts: a batch may hold a top-level sniffles_output and chunk-level ones
     dirs_to_scan = []
-    if os.path.isdir(snif_dir):
-        dirs_to_scan = [(snif_dir, sd) for sd in os.listdir(snif_dir)]
-    else:
-        for cdir in glob.glob(f"{BASE}/batch_{b:03d}/chunks/chunk_*/sniffles_output"):
+    for cdir in [f"{BASE}/batch_{b:03d}/sniffles_output"] + glob.glob(f"{BASE}/batch_{b:03d}/chunks/chunk_*/sniffles_output"):
+        if os.path.isdir(cdir):
             dirs_to_scan.extend([(cdir, sd) for sd in os.listdir(cdir)])
 
     for parent, sample_dir in dirs_to_scan:
@@ -181,7 +179,7 @@ logger.info("From Sniffles: %d", len(sniffles_records))
 # Step 4: Load circle evidence from circle_summary TSVs for sniffles records
 logger.info("Step 4: Loading circle evidence...")
 for b in range(6, 53):
-    for cdir in glob.glob(f"{BASE}/batch_{b:03d}/chunks/chunk_*/circle_output"):
+    for cdir in [f"{BASE}/batch_{b:03d}/circle_output"] + glob.glob(f"{BASE}/batch_{b:03d}/chunks/chunk_*/circle_output"):
         if not os.path.isdir(cdir):
             continue
         for sample_dir in os.listdir(cdir):
