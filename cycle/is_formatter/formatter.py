@@ -28,6 +28,8 @@ from .config import (
     DEFAULT_MIN_ENTROPY,
     DEFAULT_MIN_READS_FOR_ASSEMBLY,
     MAX_FALLBACK_READS,
+    POLISH_PAD,
+    POLISH_ROUNDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ class ISFormatter:
         min_reads: int = DEFAULT_MIN_READS_FOR_ASSEMBLY,
         assembly_timeout: int = DEFAULT_ASSEMBLY_TIMEOUT,
         min_entropy: float = DEFAULT_MIN_ENTROPY,
-        require_th_reads: bool = True,
+        require_th_reads: bool = False,
         threads: int = 4,
     ):
         self.output_dir = Path(output_dir)
@@ -103,7 +105,8 @@ class ISFormatter:
                 n_total = int(row.get("n_total_mapped", 0))
                 if n_total == 0:
                     skipped_no_reads += 1
-                    continue
+                    if self.require_th_reads:
+                        continue
 
                 consensus = row.get("consensus", "")
                 if not consensus or self._seq_entropy(consensus) < self.min_entropy:
@@ -435,31 +438,78 @@ class ISFormatter:
         consensus_seq: str,
         work_dir: Path,
         flank_size: int,
-    ) -> Optional[tuple[str, str, str]]:
+    ) -> Optional[tuple[str, str, str, str]]:
         """Extract IS + flanks from the longest read that holds the whole element.
 
         Reads are tried longest first, because the longest read may end inside
         the element. A read with both flanks complete is taken at once;
         otherwise the first read in which the element was found is used.
+        That read is then polished with the other reads, since a single raw
+        read carries its own sequencing errors.
 
-        Returns (is_sequence_from_read, upstream, downstream) or None.
+        Returns (is_sequence, upstream, downstream, method) or None; method is
+        "polished_read", or "longest_read" when polishing was not possible.
         """
-        first_found = None
+        backbone = None
         by_length = sorted(reads, key=lambda read: len(read[1]), reverse=True)
         for _, read_seq, _ in by_length[:MAX_FALLBACK_READS]:
             loc = self._locate_is_in_contig(read_seq, consensus_seq, work_dir)
             if loc is None:
                 continue
-            is_start, is_end, strand = loc
-            upstream, downstream = self._extract_flanks_from_contig(
-                read_seq, is_start, is_end, flank_size,
-            )
-            found = (read_seq[is_start:is_end], upstream, downstream)
-            if len(upstream) == flank_size and len(downstream) == flank_size:
-                return found
-            if first_found is None:
-                first_found = found
-        return first_found
+            complete = loc[0] >= flank_size and len(read_seq) - loc[1] >= flank_size
+            if backbone is None or complete:
+                backbone = (read_seq, loc)
+            if complete:
+                break
+        if backbone is None:
+            return None
+
+        read_seq, (is_start, is_end, strand) = backbone
+        window = read_seq[max(0, is_start - POLISH_PAD):is_end + POLISH_PAD]
+        polished = self._polish(window, reads, work_dir)
+        if polished is not None:
+            loc = self._locate_is_in_contig(polished, consensus_seq, work_dir)
+            if loc is not None:
+                upstream, downstream = self._extract_flanks_from_contig(polished, loc[0], loc[1], flank_size)
+                return polished[loc[0]:loc[1]], upstream, downstream, "polished_read"
+
+        upstream, downstream = self._extract_flanks_from_contig(read_seq, is_start, is_end, flank_size)
+        return read_seq[is_start:is_end], upstream, downstream, "longest_read"
+
+    def _polish(
+        self, backbone: str, reads: list[tuple[str, str, str]], work_dir: Path,
+    ) -> Optional[str]:
+        """Polish a backbone sequence with racon. Returns None if no round succeeded."""
+        if len(reads) < self.min_reads:
+            return None
+        reads_fq = work_dir / "polish_reads.fq"
+        with open(reads_fq, "w") as fh:
+            for read_id, seq, qual in reads:
+                fh.write(f"@{read_id}\n{seq}\n+\n{qual}\n")
+        target_fa = work_dir / "backbone.fa"
+        overlaps = work_dir / "polish.paf"
+        polished = None
+        for _ in range(POLISH_ROUNDS):
+            target_fa.write_text(f">polish_target\n{polished or backbone}\n")
+            try:
+                mapped = subprocess.run(
+                    ["minimap2", "-x", "map-ont", "-t", str(self.threads), str(target_fa), str(reads_fq)],
+                    capture_output=True, timeout=self.assembly_timeout,
+                )
+                if mapped.returncode != 0:
+                    break
+                overlaps.write_bytes(mapped.stdout)
+                result = subprocess.run(
+                    ["racon", "-u", "-t", str(self.threads), str(reads_fq), str(overlaps), str(target_fa)],
+                    capture_output=True, timeout=self.assembly_timeout,
+                )
+            except (subprocess.TimeoutExpired, OSError):
+                break
+            lines = result.stdout.decode().splitlines()
+            if result.returncode != 0 or len(lines) < 2:
+                break
+            polished = "".join(lines[1:])
+        return polished
 
     def _format_record(
         self,
@@ -503,6 +553,8 @@ class ISFormatter:
                 "example_th_read": is_info.get("example_th_read", ""),
             },
             "assembly_method": assembly_method,
+            # Later steps may replace "none" with "is_reference_hit" or "transposase_domain".
+            "evidence": "tail_head_reads" if is_info["n_tail_head_reads"] > 0 else "none",
         }
 
     # ------------------------------------------------------------------
@@ -625,14 +677,18 @@ class ISFormatter:
                     reads, consensus_seq, is_work, self.flank_size,
                 )
                 if fallback is not None:
-                    is_seq, upstream, downstream = fallback
-                    assembly_method = "longest_read"
+                    is_seq, upstream, downstream, assembly_method = fallback
                     logger.debug(
-                        f"  {uuid_prefix}: fallback to longest read, "
+                        f"  {uuid_prefix}: fallback to {assembly_method}, "
                         f"IS={len(is_seq)}bp, "
                         f"up={len(upstream)}bp, "
                         f"down={len(downstream)}bp"
                     )
+
+            # No read gave the element: keep the caller's sequence, without flanks.
+            if assembly_method == "none":
+                is_seq = consensus_seq
+                assembly_method = "called_consensus"
 
             record = self._format_record(
                 is_info, is_seq, upstream, downstream,

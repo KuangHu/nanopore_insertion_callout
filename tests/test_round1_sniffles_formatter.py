@@ -173,7 +173,7 @@ class TestSnifflesTable(TemporaryTest):
 
 
 class TestFormatterRecords(TemporaryTest):
-    def format_sample(self, entries, reads, unitig=None):
+    def format_sample(self, entries, reads, unitig=None, tail_head=1):
         """entries: (uuid, start, consensus). reads: (name, sequence, bait uuid, mapq)."""
         for tool in ('minimap2', 'miniasm'):
             if not shutil.which(tool):
@@ -188,7 +188,7 @@ class TestFormatterRecords(TemporaryTest):
             writer.writerow(columns)
             for uuid, start, consensus in entries:
                 writer.writerow([uuid, 'chr1', start, start, 'Sniffles2_INS', 'S', len(consensus),
-                                 consensus, 1, 0, 0, len(reads), ''])
+                                 consensus, tail_head, 0, 0, len(reads), ''])
         # Baits are the consensus twice, named {uuid}__th__j{length}, as CircleFinder builds them.
         baits = [(f'{uuid}__th__j{len(consensus)}', 2 * len(consensus)) for uuid, _, consensus in entries]
         uuids = [uuid for uuid, _, _ in entries]
@@ -234,6 +234,35 @@ class TestFormatterRecords(TemporaryTest):
         self.assertEqual(record['is_element']['sequence'], consensus)
         self.assertEqual((record['flanking_upstream']['sequence'], record['flanking_downstream']['sequence']),
                          (up, down))
+
+    def test_fallback_read_is_polished_with_the_other_reads(self):
+        """The backbone read's own errors are removed by polishing with the other reads."""
+        if not shutil.which('racon'):
+            self.skipTest('racon is required')
+        consensus = rand_seq(600)
+        up, down = rand_seq(80), rand_seq(80)
+        left, right = rand_seq(700), rand_seq(700)
+        molecule = left + up + consensus + down + right
+        noisy = list(molecule)
+        for position in range(720, len(molecule) - 720, 53):   # substitutions inside flanks and element
+            noisy[position] = 'A' if noisy[position] != 'A' else 'C'
+        # mismatches are kept away from the element ends so that the consensus still aligns end to end
+        reads = [('backbone', ''.join(noisy), 'locusE', 60)]
+        reads += [(f'clean{i}', molecule[20 * i:len(molecule) - 20 * i], 'locusE', 60) for i in range(1, 7)]
+        record = self.format_sample([('locusE', 1000, consensus)], reads)['locusE']
+        self.assertEqual(record['assembly_method'], 'polished_read')
+        self.assertEqual(record['is_element']['sequence'], consensus)
+        self.assertEqual((record['flanking_upstream']['sequence'], record['flanking_downstream']['sequence']),
+                         (up, down))
+
+    def test_insertion_without_tail_head_reads_gets_a_record(self):
+        """Every insertion gets a record; tail-head evidence is a field, not a filter."""
+        consensus = rand_seq(400)
+        up, down = rand_seq(80), rand_seq(80)
+        records = self.format_sample(
+            [('locusF', 1000, consensus)], [('spanning_read', up + consensus + down, 'locusF', 60)], tail_head=0)
+        self.assertEqual(records['locusF']['evidence'], 'none')
+        self.assertEqual(records['locusF']['is_element']['sequence'], consensus)
 
     def test_c4_reported_strand_matches_sequence_orientation(self):
         """A record must not say strand + when its sequence is the reverse complement of the consensus."""

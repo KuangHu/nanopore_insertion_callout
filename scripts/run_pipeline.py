@@ -150,10 +150,9 @@ def parse_args():
         help=f"Flanking region size (bp) for IS extraction. Default: {DEFAULT_FLANK_SIZE}",
     )
     parser.add_argument(
-        "--no-require-th", action="store_true",
-        help="Process all IS elements with mapped reads, not just those with "
-             "tail-head junction reads. By default only TH-positive elements "
-             "are assembled (much faster).",
+        "--require-th", action="store_true",
+        help="Format only IS elements with tail-head junction reads. By default "
+             "every insertion gets a record.",
     )
 
     args = parser.parse_args()
@@ -629,7 +628,7 @@ def main():
         formatter = ISFormatter(
             output_dir=args.formatter_dir,
             flank_size=args.formatter_flank_size,
-            require_th_reads=not args.no_require_th,
+            require_th_reads=args.require_th,
             threads=args.threads,
         )
         format_results = formatter.run_batch(
