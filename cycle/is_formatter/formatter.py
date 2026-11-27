@@ -27,6 +27,8 @@ from .config import (
     DEFAULT_FORMATTER_OUTPUT_DIR,
     DEFAULT_MIN_ENTROPY,
     DEFAULT_MIN_READS_FOR_ASSEMBLY,
+    COPY_MIN_COVERAGE,
+    COPY_MIN_IDENTITY,
     MAX_FALLBACK_READS,
     MAX_OVERHANG,
     POLISH_PAD,
@@ -34,6 +36,8 @@ from .config import (
 )
 
 logger = logging.getLogger(__name__)
+csv.field_size_limit(100_000_000)  # consensus and read-name fields are long
+COMPLEMENT = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 
 
 class ISFormatter:
@@ -138,6 +142,7 @@ class ISFormatter:
                     "junction_seq": row.get("junction_seq", ""),
                     "tail_head_read_ids": [r for r in row.get("tail_head_read_ids", "").split(",") if r],
                     "target_duplication": row.get("target_duplication", ""),
+                    "support_read_ids": [r for r in (row.get("support_read_ids") or "").split(",") if r],
                 })
 
         total_rows = (
@@ -157,20 +162,25 @@ class ISFormatter:
         return entries
 
     def _extract_all_reads(
-        self, bam_paths: list[Path], uuids: set[str],
-    ) -> dict[str, list[tuple[str, str, str]]]:
+        self, bam_paths: list[Path], uuids: set[str], wanted_names: set[str],
+    ) -> tuple[dict[str, list[tuple[str, str, str]]], dict[str, set[str]], dict[str, tuple[str, str, str]]]:
         """Scan all BAMs once and group reads by IS UUID.
 
         Each BAM is read in a single pass.  Reads are assigned to a UUID
         by parsing the bait reference name (``{uuid}__...``).  Reads are
         deduplicated by (uuid, read_name).
 
-        Returns dict mapping uuid -> list of (read_id, sequence, qual_str).
+        Returns three dicts: uuid -> list of (read_id, sequence, qual_str);
+        uuid -> names of its reads mapped with MAPQ above 0, the ones the
+        mapper could tell apart from other baits; and read name -> read for
+        the names in ``wanted_names``, whichever bait they mapped to.
         """
         reads_by_uuid: dict[str, list[tuple[str, str, str]]] = {
             u: [] for u in uuids
         }
         seen: dict[str, set[str]] = {u: set() for u in uuids}
+        confident: dict[str, set[str]] = {u: set() for u in uuids}
+        by_name: dict[str, tuple[str, str, str]] = {}
 
         for bam_path in bam_paths:
             try:
@@ -189,17 +199,13 @@ class ISFormatter:
                 if sep == -1:
                     continue
                 uuid = ref_name[:sep]
-                if uuid not in uuids:
+                name = read.query_name
+                if uuid not in uuids and name not in wanted_names:
                     continue
 
                 seq = read.query_sequence
                 if not seq:
                     continue
-
-                name = read.query_name
-                if name in seen[uuid]:
-                    continue
-                seen[uuid].add(name)
 
                 qual = read.query_qualities
                 if qual is not None:
@@ -207,7 +213,14 @@ class ISFormatter:
                 else:
                     qual_str = "I" * len(seq)  # default Q40
 
+                if name in wanted_names:
+                    by_name[name] = (name, seq, qual_str)
+                if uuid not in uuids or name in seen[uuid]:
+                    continue
+                seen[uuid].add(name)
                 reads_by_uuid[uuid].append((name, seq, qual_str))
+                if read.mapping_quality > 0:
+                    confident[uuid].add(name)
 
             bam.close()
 
@@ -216,7 +229,7 @@ class ISFormatter:
             f"Extracted {total} reads across {len(uuids)} IS elements "
             f"from {len(bam_paths)} BAM(s)"
         )
-        return reads_by_uuid
+        return reads_by_uuid, confident, by_name
 
     def _assemble_reads(
         self, fastq_path: Path, work_dir: Path,
@@ -438,6 +451,22 @@ class ISFormatter:
 
         return upstream, downstream
 
+    def _element_and_flanks(
+        self, contig_seq: str, loc: tuple[int, int, str], flank_size: int,
+    ) -> tuple[str, str, str]:
+        """Element, upstream and downstream flank, all on the strand of the called consensus.
+
+        The consensus follows the reference, so upstream is the reference side
+        before the insertion whichever strand the contig or read came out on.
+        """
+        is_start, is_end, strand = loc
+        element = contig_seq[is_start:is_end]
+        upstream, downstream = self._extract_flanks_from_contig(contig_seq, is_start, is_end, flank_size)
+        if strand == "-":
+            element = element.translate(COMPLEMENT)[::-1]
+            upstream, downstream = downstream.translate(COMPLEMENT)[::-1], upstream.translate(COMPLEMENT)[::-1]
+        return element, upstream, downstream
+
     def _fallback_flanks_from_longest_read(
         self,
         reads: list[tuple[str, str, str]],
@@ -477,11 +506,9 @@ class ISFormatter:
         if polished is not None:
             loc = self._locate_is_in_contig(polished, consensus_seq, work_dir)
             if loc is not None:
-                upstream, downstream = self._extract_flanks_from_contig(polished, loc[0], loc[1], flank_size)
-                return polished[loc[0]:loc[1]], upstream, downstream, "polished_read", read_id
+                return (*self._element_and_flanks(polished, loc, flank_size), "polished_read", read_id)
 
-        upstream, downstream = self._extract_flanks_from_contig(read_seq, is_start, is_end, flank_size)
-        return read_seq[is_start:is_end], upstream, downstream, "longest_read", read_id
+        return (*self._element_and_flanks(read_seq, (is_start, is_end, strand), flank_size), "longest_read", read_id)
 
     def _polish(
         self, backbone: str, reads: list[tuple[str, str, str]], work_dir: Path,
@@ -526,6 +553,70 @@ class ISFormatter:
                 break
             polished = "".join(lines[1:])
         return polished
+
+    def _group_copies(self, records: list[dict], work_dir: Path) -> None:
+        """Share circle evidence between the copies of one element in a sample.
+
+        A circle read fits every copy of its element equally well and the mapper
+        gives it to one of them, so the counts per copy mean nothing. Records
+        whose sequences match at COPY_MIN_IDENTITY over COPY_MIN_COVERAGE of
+        both are one element: each gets the summed counts, the number of
+        copies, the group name and evidence_level "element".
+        """
+        sequences = {r["is_id"]: r["is_element"]["sequence"] for r in records if r["is_element"]["sequence"]}
+        if len(sequences) < 2:
+            return
+        fasta = work_dir / "records.fa"
+        fasta.write_text("".join(f">{name}\n{seq}\n" for name, seq in sequences.items()))
+        try:
+            result = subprocess.run(
+                ["minimap2", "-c", "-X", "-x", "map-ont", "-N", "50", "-p", "0.1", "-t", str(self.threads),
+                 str(fasta), str(fasta)],
+                capture_output=True, text=True, timeout=self.assembly_timeout * 10,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("Copy grouping timed out; records stay ungrouped")
+            return
+        if result.returncode != 0:
+            logger.warning(f"Copy grouping failed; records stay ungrouped: {result.stderr[:200]}")
+            return
+
+        group = {name: name for name in sequences}
+
+        def root(name):
+            while group[name] != name:
+                name = group[name]
+            return name
+
+        for line in result.stdout.splitlines():
+            f = line.split("\t")
+            matches, block = int(f[9]), int(f[10])
+            covered = min((int(f[3]) - int(f[2])) / int(f[1]), (int(f[8]) - int(f[7])) / int(f[6]))
+            if matches / block >= COPY_MIN_IDENTITY and covered >= COPY_MIN_COVERAGE:
+                a, b = root(f[0]), root(f[5])
+                group[max(a, b)] = min(a, b)
+
+        members: dict[str, list[dict]] = {}
+        for record in records:
+            if record["is_id"] in group:
+                members.setdefault(root(record["is_id"]), []).append(record)
+        for name, copies in members.items():
+            if len(copies) < 2:
+                continue
+            best = max(copies, key=lambda r: r["circle_evidence"]["n_tail_head_reads"])["circle_evidence"]
+            shared = {
+                key: sum(r["circle_evidence"][key] for r in copies)
+                for key in ("n_tail_head_reads", "n_tail_head_clipped_reads",
+                            "n_genome_head_reads", "n_tail_genome_reads")
+            }
+            read_ids = [i for r in copies for i in r["circle_evidence"]["tail_head_read_ids"]]
+            for record in copies:
+                record["n_copies"] = len(copies)
+                record["element_group"] = name
+                record["circle_evidence"] = {
+                    **best, **shared, "tail_head_read_ids": read_ids, "evidence_level": "element",
+                }
+                record["evidence"] = "tail_head_reads" if shared["n_tail_head_reads"] > 0 else "none"
 
     def _format_record(
         self,
@@ -576,7 +667,12 @@ class ISFormatter:
                 "junction_sequence": is_info.get("junction_seq", ""),
                 "target_duplication": is_info.get("target_duplication", ""),
                 "tail_head_read_ids": is_info.get("tail_head_read_ids", []),
+                # Becomes "element" when the counts are shared by all copies of the element.
+                "evidence_level": "insertion",
             },
+            "support_read_ids": is_info.get("support_read_ids", []),
+            "n_copies": 1,
+            "element_group": is_info["is_uuid"],
             "assembly_method": assembly_method,
             # The one read the sequence was taken from (empty for an assembly or the caller's
             # consensus), and how many reads of the element were available.
@@ -648,7 +744,8 @@ class ISFormatter:
 
         # 4. Extract all reads from BAMs in a single pass, grouped by UUID
         all_uuids = {e["is_uuid"] for e in is_entries if e.get("consensus")}
-        reads_by_uuid = self._extract_all_reads(bam_paths, all_uuids)
+        support_names = {name for e in is_entries for name in e["support_read_ids"]}
+        reads_by_uuid, confident, by_name = self._extract_all_reads(bam_paths, all_uuids, support_names)
 
         # 5. Process each IS element
         records: list[dict] = []
@@ -665,8 +762,20 @@ class ISFormatter:
             is_work = assembly_dir / uuid_prefix
             is_work.mkdir(parents=True, exist_ok=True)
 
-            # Look up pre-extracted reads for this IS
-            reads = reads_by_uuid.get(uuid, [])
+            # Reads of this insertion. The caller's supporting reads cross this locus in the
+            # genome alignment, so they belong to it even when the element has other copies.
+            # Without them, use the reads mapped to this element's bait: those with MAPQ above
+            # 0 if there are any, otherwise all of them, in which case a read may come from
+            # another copy and its flanks cannot be given to this locus.
+            ambiguous = False
+            reads = [by_name[name] for name in is_info["support_read_ids"] if name in by_name]
+            if not reads:
+                reads = reads_by_uuid.get(uuid, [])
+                sure = [read for read in reads if read[0] in confident.get(uuid, ())]
+                if sure:
+                    reads = sure
+                else:
+                    ambiguous = bool(reads)
 
             is_seq = ""
             upstream = ""
@@ -687,11 +796,7 @@ class ISFormatter:
                         contig, consensus_seq, is_work,
                     )
                     if loc is not None:
-                        is_start, is_end, strand = loc
-                        is_seq = contig[is_start:is_end]
-                        upstream, downstream = self._extract_flanks_from_contig(
-                            contig, is_start, is_end, self.flank_size,
-                        )
+                        is_seq, upstream, downstream = self._element_and_flanks(contig, loc, self.flank_size)
                         assembly_method = "assembly"
                         logger.debug(
                             f"  {uuid_prefix}: assembly OK, "
@@ -719,11 +824,16 @@ class ISFormatter:
                 is_seq = consensus_seq
                 assembly_method = "called_consensus"
 
+            if ambiguous:
+                upstream = downstream = ""
             record = self._format_record(
                 is_info, is_seq, upstream, downstream,
                 sample_id, assembly_method, sequence_read_id, len(reads),
             )
+            record["flank_status"] = "ambiguous" if ambiguous else "ok" if upstream and downstream else "missing"
             records.append(record)
+
+        self._group_copies(records, assembly_dir)
 
         # 6. Write outputs
         if not records:
@@ -881,6 +991,7 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
         "assembly_method",
         "evidence", "target_duplication", "junction_seq", "example_th_read_id",
         "tail_head_read_ids", "sequence_read_id", "n_element_reads",
+        "flank_status", "n_copies", "element_group", "evidence_level", "n_th_clipped_reads", "support_read_ids",
     ]
 
     rows: list[dict] = []
@@ -910,6 +1021,12 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
             "tail_head_read_ids": ",".join(rec["circle_evidence"]["tail_head_read_ids"]),
             "sequence_read_id": rec["sequence_read_id"],
             "n_element_reads": rec["n_element_reads"],
+            "flank_status": rec["flank_status"],
+            "n_copies": rec["n_copies"],
+            "element_group": rec["element_group"],
+            "evidence_level": rec["circle_evidence"]["evidence_level"],
+            "n_th_clipped_reads": rec["circle_evidence"]["n_tail_head_clipped_reads"],
+            "support_read_ids": ",".join(rec["support_read_ids"]),
         })
 
     with open(path, "w", newline="") as fh:

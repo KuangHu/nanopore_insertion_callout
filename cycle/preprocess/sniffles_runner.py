@@ -162,8 +162,9 @@ class SnifflesRunner:
         # Remove entries that still have no usable sequence
         insertions = [ins for ins in insertions if ins["Sequence"]]
 
+        # The supporting reads stay in the table: they tie reads to this locus downstream
         for ins in insertions:
-            ins.pop("Rnames", None)
+            ins["Rnames"] = ",".join(ins["Rnames"])
             ins["Length"] = len(ins["Sequence"])
 
         if insertions:
@@ -172,7 +173,7 @@ class SnifflesRunner:
             return table_path
         else:
             logger.warning(f"No insertions found for {sample_id}")
-            pd.DataFrame(columns=["UUID", "Chrom", "Start", "End", "Length", "Family", "Subfamily", "Consensus", "Support"]).to_csv(
+            pd.DataFrame(columns=["UUID", "Chrom", "Start", "End", "Length", "Family", "Subfamily", "Consensus", "Support", "Rnames"]).to_csv(
                 table_path, sep="\t", index=False
             )
             return table_path
@@ -337,7 +338,7 @@ class SnifflesRunner:
         """Write insertion table in tldr-compatible format."""
         df = pd.DataFrame(insertions)
         df = df.rename(columns={"Sequence": "Consensus"})
-        cols = ["UUID", "Chrom", "Start", "End", "Length", "Family", "Subfamily", "Consensus", "Support"]
+        cols = ["UUID", "Chrom", "Start", "End", "Length", "Family", "Subfamily", "Consensus", "Support", "Rnames"]
         df = df[cols]
         df.to_csv(output_path, sep="\t", index=False)
 

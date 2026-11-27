@@ -37,6 +37,7 @@ from .config import (
 )
 
 logger = logging.getLogger(__name__)
+csv.field_size_limit(100_000_000)  # consensus and read-name fields are long
 
 READ_COLUMNS = [
     "read_id", "sample_id", "is_uuid", "junction_type", "chrom",
@@ -49,7 +50,7 @@ SUMMARY_COLUMNS = [
     "is_uuid", "chrom", "start", "end", "family", "subfamily",
     "consensus_length", "consensus", "target_duplication", "n_tail_head_reads", "n_tail_head_clipped_reads",
     "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
-    "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids",
+    "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids", "support_read_ids",
 ]
 
 
@@ -64,6 +65,7 @@ class ISEntry:
     family: str
     subfamily: str
     consensus: str
+    rnames: str = ""  # reads supporting the insertion at this locus, comma separated
 
 
 class CircleFinder:
@@ -144,6 +146,7 @@ class CircleFinder:
                     family=row.get("Family", "NA"),
                     subfamily=row.get("Subfamily", "NA"),
                     consensus=consensus,
+                    rnames=row.get("Rnames") or "",
                 ))
 
         logger.info(
@@ -476,6 +479,7 @@ class CircleFinder:
                 "example_th_read_id": th_example[uuid][3] if uuid in th_example else "",
                 "junction_seq": th_example[uuid][4] if uuid in th_example else "",
                 "tail_head_read_ids": ",".join(th_read_ids.get(uuid, [])[:MAX_RECORDED_READS]),
+                "support_read_ids": entry.rnames,
             }
 
         return junction_reads, summary_by_uuid
