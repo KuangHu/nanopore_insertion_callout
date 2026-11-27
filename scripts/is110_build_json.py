@@ -106,6 +106,7 @@ for b in range(6, 53):
                 sample_to_org[row["srr_accession"]] = row.get("organism", "")
 
 sniffles_records = {}
+empty_ids = {i for i, r in formatter_records.items() if not r["is_element"]["sequence"]}
 for b in range(6, 53):
     snif_dir = f"{BASE}/batch_{b:03d}/sniffles_output"
     dirs_to_scan = []
@@ -123,6 +124,10 @@ for b in range(6, 53):
             reader = csv.DictReader(f, delimiter="\t")
             for row in reader:
                 uuid = row["UUID"]
+                if uuid in empty_ids:
+                    # The formatter found no sequence for this record: keep the caller's.
+                    formatter_records[uuid]["is_element"]["sequence"] = row.get("Consensus", "")
+                    formatter_records[uuid]["is_element"]["length"] = len(row.get("Consensus", ""))
                 if uuid not in missing_ids or uuid in sniffles_records:
                     continue
                 consensus = row.get("Consensus", "")

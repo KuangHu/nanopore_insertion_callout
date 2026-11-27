@@ -453,7 +453,9 @@ class CircleFinder:
                 "is_uuid": uuid,
                 "chrom": entry.chrom,
                 "start": entry.start + shift,
-                "end": entry.end + len(consensus) - len(entry.consensus) + shift,
+                # A Sniffles insertion is a point (start == end) and stays one; a table that
+                # gives the element as a span has its end follow the trimmed length.
+                "end": entry.end + shift + (len(consensus) - len(entry.consensus) if entry.end != entry.start else 0),
                 "family": entry.family,
                 "subfamily": entry.subfamily,
                 "consensus_length": len(consensus),

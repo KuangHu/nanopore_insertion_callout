@@ -65,6 +65,8 @@ logger.info("Without circle evidence: %d to find", len(missing_ids))
 # First build batch/sample index from sniffles_output dir structure
 without_circle = []
 found = 0
+# Formatter records without a sequence get the caller's sequence from the same tables.
+empty = {r["is_id"]: r for r in with_circle if not r["is_element"]["sequence"]}
 for b in range(6, 29):
     snif_dir = f"{BASE}/batch_{b:03d}/sniffles_output"
     if not os.path.isdir(snif_dir):
@@ -77,6 +79,10 @@ for b in range(6, 29):
             reader = csv.DictReader(f, delimiter="\t")
             for row in reader:
                 uuid = row["UUID"]
+                if uuid in empty:
+                    element = empty.pop(uuid)["is_element"]
+                    element["sequence"] = row.get("Consensus", "")
+                    element["length"] = len(element["sequence"])
                 if uuid not in missing_ids:
                     continue
                 consensus = row.get("Consensus", "")
@@ -103,9 +109,9 @@ for b in range(6, 29):
                 filt._annotate_orf_domains(rec, trans_domains)
                 without_circle.append(rec)
                 found += 1
-        if found >= len(missing_ids):
+        if found >= len(missing_ids) and not empty:
             break
-    if found >= len(missing_ids):
+    if found >= len(missing_ids) and not empty:
         break
 
 logger.info("Found %d/%d without circle evidence", len(without_circle), len(missing_ids))

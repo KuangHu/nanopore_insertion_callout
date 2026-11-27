@@ -142,35 +142,29 @@ class SnifflesRunner:
                 insertions = self._parse_vcf(vcf_path, min_size, max_size, sample_id)
             except Exception as e:
                 logger.warning(f"Failed to parse VCF for {sample_id}: {e}")
+                return None
 
-        # Assemble consensus for symbolic ALTs with enough support
-        assembly_dir = sample_dir / "assembly"
-        symbolic = [ins for ins in insertions
-                    if not ins["Sequence"] and len(ins.get("Rnames", [])) >= 3]
-        n_assembled = 0
+        # A symbolic ALT gives no bases: take them from the supporting reads
+        symbolic = [ins for ins in insertions if not ins["Sequence"]]
+        n_found = 0
         for ins in symbolic:
-            work = assembly_dir / ins["UUID"][:8]
-            contig = self._assemble_insertion(
-                bam_path=bam, chrom=ins["Chrom"], pos=ins["Start"],
-                svlen=ins["End"] - ins["Start"],
-                rnames=ins["Rnames"], work_dir=work,
-            )
-            if contig and self._seq_entropy(contig) >= 1.5 and len(contig) >= min_size:
-                ins["Sequence"] = contig
-                n_assembled += 1
+            # A duplication may be reported at either end of the copied stretch
+            sites = [ins["Start"], ins["Start"] + ins["Length"]] if ins["Family"].endswith("DUP") else [ins["Start"]]
+            for site in sites:
+                inserted = self._inserted_from_reads(bam, ins["Chrom"], site, ins["Length"], ins["Rnames"])
+                if inserted and self._seq_entropy(inserted) >= 1.5 and min_size <= len(inserted) <= max_size:
+                    ins["Sequence"] = inserted
+                    n_found += 1
+                    break
         if symbolic:
-            logger.info(f"  {sample_id}: assembled {n_assembled}/{len(symbolic)} symbolic ALTs")
+            logger.info(f"  {sample_id}: inserted bases found in reads for {n_found}/{len(symbolic)} symbolic ALTs")
 
         # Remove entries that still have no usable sequence
         insertions = [ins for ins in insertions if ins["Sequence"]]
 
-        # Drop Rnames before writing (not needed downstream)
         for ins in insertions:
             ins.pop("Rnames", None)
-
-        # Cleanup assembly temp files
-        if assembly_dir.exists():
-            shutil.rmtree(assembly_dir, ignore_errors=True)
+            ins["Length"] = len(ins["Sequence"])
 
         if insertions:
             self._write_table(insertions, table_path)
@@ -178,7 +172,7 @@ class SnifflesRunner:
             return table_path
         else:
             logger.warning(f"No insertions found for {sample_id}")
-            pd.DataFrame(columns=["UUID", "Chrom", "Start", "End", "Consensus", "Support"]).to_csv(
+            pd.DataFrame(columns=["UUID", "Chrom", "Start", "End", "Length", "Family", "Subfamily", "Consensus", "Support"]).to_csv(
                 table_path, sep="\t", index=False
             )
             return table_path
@@ -189,9 +183,12 @@ class SnifflesRunner:
     ) -> list[dict]:
         """Parse Sniffles2 VCF and extract insertions.
 
-        Symbolic ALTs (``<INS>``) get ``Sequence=""`` and supporting read
-        names stored in ``Rnames`` for downstream assembly.  Resolved
-        sequences with Shannon entropy below *min_entropy* are discarded.
+        An insertion is a point on the reference: ``Start`` and ``End`` are both
+        the VCF position (the inserted bases follow that base) and the inserted
+        length is in ``Length``. Symbolic ALTs (``<INS>``, ``<DUP>``) get
+        ``Sequence=""`` and the supporting read names in ``Rnames``. Breakends
+        are not insertions and are skipped. Resolved sequences with Shannon
+        entropy below *min_entropy* are discarded.
         """
         insertions = []
         n_symbolic = 0
@@ -221,7 +218,7 @@ class SnifflesRunner:
                         info_dict[key] = val
 
                 svtype = info_dict.get("SVTYPE", "")
-                if svtype not in ("INS", "DUP", "BND"):
+                if svtype not in ("INS", "DUP"):
                     continue
 
                 svlen = info_dict.get("SVLEN")
@@ -229,8 +226,6 @@ class SnifflesRunner:
                     svlen = abs(int(svlen))
                     if svlen < min_size or svlen > max_size:
                         continue
-                elif svtype == "BND":
-                    svlen = min_size
                 else:
                     if alt.startswith("<"):
                         continue
@@ -259,7 +254,8 @@ class SnifflesRunner:
                     "UUID": str(uuid.uuid4()),
                     "Chrom": chrom,
                     "Start": pos,
-                    "End": pos + svlen,
+                    "End": pos,
+                    "Length": svlen,
                     "Sequence": sequence,
                     "Support": support,
                     "Family": f"Sniffles2_{svtype}",
@@ -273,122 +269,75 @@ class SnifflesRunner:
         )
         return insertions
 
-    def _assemble_insertion(
-        self,
-        bam_path: Path,
-        chrom: str,
-        pos: int,
-        svlen: int,
-        rnames: list[str],
-        work_dir: Path,
-        timeout: int = 120,
-    ) -> Optional[str]:
-        """Assemble a consensus for a symbolic ALT from supporting reads.
-
-        Extracts reads by name from the BAM region around the insertion,
-        then runs minimap2 overlap + miniasm to produce a consensus contig.
-
-        Returns the longest contig sequence, or None on failure.
-        """
-        if not rnames:
-            return None
-
-        rname_set = set(rnames)
-        work_dir.mkdir(parents=True, exist_ok=True)
-        fastq_path = work_dir / "reads.fastq"
-
-        # Fetch supporting reads from the BAM around the insertion site
-        pad = max(svlen, 2000)
-        start = max(0, pos - pad)
-        end = pos + pad
-        n_written = 0
-
-        try:
-            # One record per read. A supplementary record is hard clipped and holds only
-            # part of the read, so the longest stored sequence is kept (the primary if present).
-            longest = {}
-            with pysam.AlignmentFile(str(bam_path), "rb") as bam:
-                for read in bam.fetch(chrom, start, end):
-                    if read.query_name in rname_set and read.query_sequence:
-                        kept = longest.get(read.query_name)
-                        if kept is None or len(read.query_sequence) > len(kept[0]):
-                            # Stored sequences follow the reference strand; either strand assembles.
-                            longest[read.query_name] = (read.query_sequence, read.query_qualities)
-            with open(fastq_path, "w") as fq:
-                for name, (sequence, qual) in longest.items():
-                    qual_str = (
-                        "".join(chr(q + 33) for q in qual)
-                        if qual is not None
-                        else "I" * len(sequence)
-                    )
-                    fq.write(f"@{name}\n{sequence}\n+\n{qual_str}\n")
-                    n_written += 1
-        except Exception as exc:
-            logger.debug(f"Failed to extract reads at {chrom}:{pos}: {exc}")
-            return None
-
-        if n_written < 3:
-            return None
-
-        # minimap2 all-vs-all overlap
-        overlaps_paf = work_dir / "overlaps.paf"
-        try:
-            result = subprocess.run(
-                ["minimap2", "-x", "ava-ont", "-t", "1",
-                 str(fastq_path), str(fastq_path)],
-                capture_output=True, timeout=timeout,
-            )
-            if result.returncode != 0:
-                return None
-            overlaps_paf.write_bytes(result.stdout)
-        except (subprocess.TimeoutExpired, Exception):
-            return None
-
-        if overlaps_paf.stat().st_size == 0:
-            return None
-
-        # miniasm assembly
-        raw_gfa = work_dir / "raw.gfa"
-        try:
-            result = subprocess.run(
-                ["miniasm", "-f", str(fastq_path), str(overlaps_paf)],
-                capture_output=True, timeout=timeout,
-            )
-            if result.returncode != 0:
-                return None
-            raw_gfa.write_bytes(result.stdout)
-        except (subprocess.TimeoutExpired, Exception):
-            return None
-
-        return self._parse_gfa_longest(raw_gfa)
-
     @staticmethod
-    def _parse_gfa_longest(gfa_path: Path) -> Optional[str]:
-        """Parse GFA S-lines and return the longest contig sequence."""
-        longest = None
-        longest_len = 0
-        try:
-            with open(gfa_path) as fh:
-                for line in fh:
-                    if not line.startswith("S\t"):
-                        continue
-                    parts = line.rstrip("\n").split("\t")
-                    if len(parts) < 3:
-                        continue
-                    seq = parts[2]
-                    if seq and len(seq) > longest_len:
-                        longest = seq
-                        longest_len = len(seq)
-        except Exception as exc:
-            logger.debug(f"Failed to parse GFA {gfa_path}: {exc}")
+    def _inserted_from_reads(
+        bam_path: Path, chrom: str, pos: int, svlen: int, rnames: list[str], slack: int = 100,
+    ) -> Optional[str]:
+        """Inserted bases of a symbolic call, taken from one supporting read.
+
+        A read shows the insertion either as one insertion inside an alignment
+        or, when the aligner split the read, as the read bases between the piece
+        that ends at the site and the piece that starts there. Of all supporting
+        reads the one whose inserted length is closest to the called length is
+        used. The bases are given on the reference strand. Returns None when no
+        read shows the insertion.
+        """
+        wanted = set(rnames)
+        by_read: dict[str, list] = {}
+        with pysam.AlignmentFile(str(bam_path), "rb") as bam:
+            for read in bam.fetch(chrom, max(0, pos - slack), pos + slack):
+                if read.query_name in wanted and not read.is_secondary and read.cigartuples:
+                    by_read.setdefault(read.query_name, []).append(read)
+
+        candidates = []
+        for records in by_read.values():
+            for read in records:
+                if not read.query_sequence:
+                    continue
+                stored = 0  # position in the stored sequence, which leaves out hard clips
+                ref = read.reference_start
+                for op, length in read.cigartuples:
+                    if op == 1:
+                        if abs(ref - pos) <= slack and length * 2 >= svlen:
+                            candidates.append(read.query_sequence[stored:stored + length])
+                        stored += length
+                    elif op in (0, 7, 8):
+                        stored += length
+                        ref += length
+                    elif op == 4:
+                        stored += length
+                    elif op in (2, 3):
+                        ref += length
+
+            # Split read: only the primary record stores the whole read
+            primary = next((r for r in records if not r.is_supplementary and r.query_sequence), None)
+            if primary is None:
+                continue
+            spans = []  # (read start, read end, record), read positions counting every clip
+            for read in records:
+                if read.is_reverse != primary.is_reverse:
+                    continue
+                lead = 0
+                for op, length in read.cigartuples:
+                    if op not in (4, 5):
+                        break
+                    lead += length
+                spans.append((lead, lead + read.query_alignment_length, read))
+            for left_start, left_end, left in spans:
+                for right_start, right_end, right in spans:
+                    if (left is not right and abs(left.reference_end - pos) <= slack
+                            and abs(right.reference_start - pos) <= slack and left_end < right_start):
+                        candidates.append(primary.query_sequence[left_end:right_start])
+
+        if not candidates:
             return None
-        return longest
+        return min(candidates, key=lambda seq: abs(len(seq) - svlen))
 
     def _write_table(self, insertions: list[dict], output_path: Path):
         """Write insertion table in tldr-compatible format."""
         df = pd.DataFrame(insertions)
         df = df.rename(columns={"Sequence": "Consensus"})
-        cols = ["UUID", "Chrom", "Start", "End", "Family", "Subfamily", "Consensus", "Support"]
+        cols = ["UUID", "Chrom", "Start", "End", "Length", "Family", "Subfamily", "Consensus", "Support"]
         df = df[cols]
         df.to_csv(output_path, sep="\t", index=False)
 

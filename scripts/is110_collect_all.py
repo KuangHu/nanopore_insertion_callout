@@ -83,6 +83,7 @@ missing_ids = is110_ids - set(formatter_records.keys())
 logger.info("Need Sniffles data for %d IS110s", len(missing_ids))
 
 sniffles_records = {}
+empty_ids = {i for i, r in formatter_records.items() if not r["is_element"]["sequence"]}
 for b in range(6, 29):
     snif_dir = f"{BASE}/batch_{b:03d}/sniffles_output"
     if not os.path.isdir(snif_dir):
@@ -95,6 +96,10 @@ for b in range(6, 29):
             reader = csv.DictReader(f, delimiter="\t")
             for row in reader:
                 uuid = row["UUID"]
+                if uuid in empty_ids:
+                    # The formatter found no sequence for this record: keep the caller's.
+                    formatter_records[uuid]["is_element"]["sequence"] = row.get("Consensus", "")
+                    formatter_records[uuid]["is_element"]["length"] = len(row.get("Consensus", ""))
                 if uuid not in missing_ids:
                     continue
                 consensus = row.get("Consensus", "")
