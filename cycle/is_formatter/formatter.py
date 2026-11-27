@@ -780,7 +780,9 @@ class ISFormatter:
             # 0 if there are any, otherwise all of them, in which case a read may come from
             # another copy and its flanks cannot be given to this locus.
             ambiguous = False
-            reads = [by_name[name] for name in is_info["support_read_ids"] if name in by_name]
+            # Sniffles lists the reads in a different order on every run; sort them so the
+            # assembly and polishing get the same input each time.
+            reads = [by_name[name] for name in sorted(is_info["support_read_ids"]) if name in by_name]
             if not reads:
                 reads = reads_by_uuid.get(uuid, [])
                 sure = [read for read in reads if read[0] in confident.get(uuid, ())]
