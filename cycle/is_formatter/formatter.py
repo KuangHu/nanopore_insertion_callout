@@ -133,6 +133,10 @@ class ISFormatter:
                     "n_tail_genome_reads": int(row.get("n_tail_genome_reads", 0)),
                     "n_total_mapped": n_total,
                     "example_th_read": row.get("example_th_read", ""),
+                    "example_th_read_id": row.get("example_th_read_id", ""),
+                    "junction_seq": row.get("junction_seq", ""),
+                    "tail_head_read_ids": [r for r in row.get("tail_head_read_ids", "").split(",") if r],
+                    "target_duplication": row.get("target_duplication", ""),
                 })
 
         total_rows = (
@@ -439,7 +443,7 @@ class ISFormatter:
         consensus_seq: str,
         work_dir: Path,
         flank_size: int,
-    ) -> Optional[tuple[str, str, str, str]]:
+    ) -> Optional[tuple[str, str, str, str, str]]:
         """Extract IS + flanks from the longest read that holds the whole element.
 
         Reads are tried longest first, because the longest read may end inside
@@ -448,34 +452,35 @@ class ISFormatter:
         That read is then polished with the other reads, since a single raw
         read carries its own sequencing errors.
 
-        Returns (is_sequence, upstream, downstream, method) or None; method is
-        "polished_read", or "longest_read" when polishing was not possible.
+        Returns (is_sequence, upstream, downstream, method, read_id) or None; method is
+        "polished_read", or "longest_read" when polishing was not possible, and
+        read_id names the read the sequence was taken from.
         """
         backbone = None
         by_length = sorted(reads, key=lambda read: len(read[1]), reverse=True)
-        for _, read_seq, _ in by_length[:MAX_FALLBACK_READS]:
+        for read_id, read_seq, _ in by_length[:MAX_FALLBACK_READS]:
             loc = self._locate_is_in_contig(read_seq, consensus_seq, work_dir)
             if loc is None:
                 continue
             complete = loc[0] >= flank_size and len(read_seq) - loc[1] >= flank_size
             if backbone is None or complete:
-                backbone = (read_seq, loc)
+                backbone = (read_seq, loc, read_id)
             if complete:
                 break
         if backbone is None:
             return None
 
-        read_seq, (is_start, is_end, strand) = backbone
+        read_seq, (is_start, is_end, strand), read_id = backbone
         window = read_seq[max(0, is_start - POLISH_PAD):is_end + POLISH_PAD]
         polished = self._polish(window, reads, work_dir)
         if polished is not None:
             loc = self._locate_is_in_contig(polished, consensus_seq, work_dir)
             if loc is not None:
                 upstream, downstream = self._extract_flanks_from_contig(polished, loc[0], loc[1], flank_size)
-                return polished[loc[0]:loc[1]], upstream, downstream, "polished_read"
+                return polished[loc[0]:loc[1]], upstream, downstream, "polished_read", read_id
 
         upstream, downstream = self._extract_flanks_from_contig(read_seq, is_start, is_end, flank_size)
-        return read_seq[is_start:is_end], upstream, downstream, "longest_read"
+        return read_seq[is_start:is_end], upstream, downstream, "longest_read", read_id
 
     def _polish(
         self, backbone: str, reads: list[tuple[str, str, str]], work_dir: Path,
@@ -529,6 +534,8 @@ class ISFormatter:
         downstream: str,
         sample_id: str,
         assembly_method: str,
+        sequence_read_id: str,
+        n_reads: int,
     ) -> dict:
         """Build ISExtractor-compatible record dict."""
         return {
@@ -561,8 +568,16 @@ class ISFormatter:
                 "n_genome_head_reads": is_info["n_genome_head_reads"],
                 "n_tail_genome_reads": is_info["n_tail_genome_reads"],
                 "example_th_read": is_info.get("example_th_read", ""),
+                "example_th_read_id": is_info.get("example_th_read_id", ""),
+                "junction_sequence": is_info.get("junction_seq", ""),
+                "target_duplication": is_info.get("target_duplication", ""),
+                "tail_head_read_ids": is_info.get("tail_head_read_ids", []),
             },
             "assembly_method": assembly_method,
+            # The one read the sequence was taken from (empty for an assembly or the caller's
+            # consensus), and how many reads of the element were available.
+            "sequence_read_id": sequence_read_id,
+            "n_element_reads": n_reads,
             # Later steps may replace "none" with "is_reference_hit" or "transposase_domain".
             "evidence": "tail_head_reads" if is_info["n_tail_head_reads"] > 0 else "none",
         }
@@ -654,6 +669,7 @@ class ISFormatter:
             upstream = ""
             downstream = ""
             assembly_method = "none"
+            sequence_read_id = ""
 
             if len(reads) >= self.min_reads:
                 # Try assembly
@@ -687,7 +703,7 @@ class ISFormatter:
                     reads, consensus_seq, is_work, self.flank_size,
                 )
                 if fallback is not None:
-                    is_seq, upstream, downstream, assembly_method = fallback
+                    is_seq, upstream, downstream, assembly_method, sequence_read_id = fallback
                     logger.debug(
                         f"  {uuid_prefix}: fallback to {assembly_method}, "
                         f"IS={len(is_seq)}bp, "
@@ -702,7 +718,7 @@ class ISFormatter:
 
             record = self._format_record(
                 is_info, is_seq, upstream, downstream,
-                sample_id, assembly_method,
+                sample_id, assembly_method, sequence_read_id, len(reads),
             )
             records.append(record)
 
@@ -860,6 +876,8 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
         "n_th_reads", "n_gh_reads", "n_tg_reads",
         "example_th_seq",
         "assembly_method",
+        "evidence", "target_duplication", "junction_seq", "example_th_read_id",
+        "tail_head_read_ids", "sequence_read_id", "n_element_reads",
     ]
 
     rows: list[dict] = []
@@ -882,6 +900,13 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
             "n_tg_reads": rec["circle_evidence"]["n_tail_genome_reads"],
             "example_th_seq": rec["circle_evidence"]["example_th_read"],
             "assembly_method": rec["assembly_method"],
+            "evidence": rec["evidence"],
+            "target_duplication": rec["circle_evidence"]["target_duplication"],
+            "junction_seq": rec["circle_evidence"]["junction_sequence"],
+            "example_th_read_id": rec["circle_evidence"]["example_th_read_id"],
+            "tail_head_read_ids": ",".join(rec["circle_evidence"]["tail_head_read_ids"]),
+            "sequence_read_id": rec["sequence_read_id"],
+            "n_element_reads": rec["n_element_reads"],
         })
 
     with open(path, "w", newline="") as fh:

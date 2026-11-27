@@ -32,6 +32,8 @@ from .config import (
     DEFAULT_MIN_CONSENSUS_ENTROPY,
     DEFAULT_MIN_CONSENSUS_LENGTH,
     DEFAULT_MIN_JUNCTION_OVERLAP,
+    JUNCTION_FLANK,
+    MAX_RECORDED_READS,
 )
 
 logger = logging.getLogger(__name__)
@@ -287,8 +289,9 @@ class CircleFinder:
         junction_reads: list[dict] = []
         total_mapped: dict[str, int] = {}
         counts: dict[str, dict[str, int]] = {}  # uuid -> {type -> count}
-        # uuid -> (mapq, length, sequence) for best tail-head example read
-        th_example: dict[str, tuple[int, int, str]] = {}
+        # uuid -> (mapq, length, sequence, read id, junction sequence) for best tail-head example read
+        th_example: dict[str, tuple[int, int, str, str, str]] = {}
+        th_read_ids: dict[str, list[str]] = {}
         junction_gaps: dict[str, list[tuple[int, int]]] = {}  # uuid -> (start, length) per tail-head read
 
         tol = self.boundary_tolerance
@@ -348,6 +351,8 @@ class CircleFinder:
                     and (abs(ref_end - n) < tol or abs(ref_end - 2 * n) < tol)):
                 detected_types.append("tail_genome")
 
+            # Primary records are never hard clipped, so query positions are positions in the read.
+            sequence = read.query_sequence or ""
             for junction_type in detected_types:
                 if uuid not in counts:
                     counts[uuid] = {}
@@ -355,15 +360,27 @@ class CircleFinder:
                     counts[uuid].get(junction_type, 0) + 1
                 )
 
-                if (junction_type == "tail_head"
-                        and read.query_sequence):
-                    candidate = (
-                        read.mapping_quality,
-                        len(read.query_sequence),
-                        read.query_sequence,
-                    )
-                    if uuid not in th_example or candidate[:2] > th_example[uuid][:2]:
-                        th_example[uuid] = candidate
+                # Where the junction falls in the read as aligned, and the bases around it.
+                if junction_type == "tail_head":
+                    query_pos = self._query_pos(cigar, ref_start, junction_pos)
+                elif junction_type == "genome_head":
+                    query_pos = left_clip
+                else:
+                    query_pos = read.query_length - right_clip
+                junction_seq = sequence[max(0, query_pos - JUNCTION_FLANK):query_pos + JUNCTION_FLANK]
+
+                if junction_type == "tail_head":
+                    th_read_ids.setdefault(uuid, []).append(read.query_name)
+                    if sequence:
+                        candidate = (
+                            read.mapping_quality,
+                            len(sequence),
+                            sequence,
+                            read.query_name,
+                            junction_seq,
+                        )
+                        if uuid not in th_example or candidate[:2] > th_example[uuid][:2]:
+                            th_example[uuid] = candidate
 
                 junction_reads.append({
                     "read_id": read.query_name,
@@ -376,6 +393,11 @@ class CircleFinder:
                     "family": entry.family,
                     "subfamily": entry.subfamily,
                     "read_length": read.query_length,
+                    "strand": "-" if read.is_reverse else "+",
+                    # Position in the read as sequenced, so it can be found again in the FASTQ.
+                    "junction_read_pos": read.query_length - query_pos if read.is_reverse else query_pos,
+                    "junction_seq": junction_seq,
+                    "junction_deletion": gap[1] if junction_type == "tail_head" else "",
                     "alignment_start": ref_start,
                     "alignment_end": ref_end,
                     "junction_pos": junction_pos,
@@ -425,9 +447,31 @@ class CircleFinder:
                 "n_tail_genome_reads": uuid_counts.get("tail_genome", 0),
                 "n_total_mapped": total_mapped.get(uuid, 0),
                 "example_th_read": th_example[uuid][2] if uuid in th_example else "",
+                "example_th_read_id": th_example[uuid][3] if uuid in th_example else "",
+                "junction_seq": th_example[uuid][4] if uuid in th_example else "",
+                "tail_head_read_ids": ",".join(th_read_ids.get(uuid, [])[:MAX_RECORDED_READS]),
             }
 
         return junction_reads, summary_by_uuid
+
+    @staticmethod
+    def _query_pos(cigar, ref_start, ref_pos):
+        """Query position aligned to ``ref_pos``, or the next one when it falls in a deletion."""
+        query = 0
+        ref = ref_start
+        for op, length in cigar or []:
+            if op in (0, 7, 8):
+                if ref + length > ref_pos:
+                    return query + ref_pos - ref
+                query += length
+                ref += length
+            elif op in (1, 4):
+                query += length
+            elif op in (2, 3):
+                if ref + length > ref_pos:
+                    return query
+                ref += length
+        return query
 
     @staticmethod
     def _junction_gap(cigar, ref_start, junction_pos, min_overlap):
@@ -536,6 +580,7 @@ class CircleFinder:
             "start", "end", "family", "subfamily", "read_length",
             "alignment_start", "alignment_end", "junction_pos",
             "overlap_left", "overlap_right", "mapping_quality",
+            "strand", "junction_read_pos", "junction_seq", "junction_deletion",
         ])
 
         summary_tsv = sample_dir / f"{sample_id}_circle_summary.tsv"
@@ -544,7 +589,7 @@ class CircleFinder:
             "is_uuid", "chrom", "start", "end", "family", "subfamily",
             "consensus_length", "consensus", "target_duplication", "n_tail_head_reads",
             "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
-            "example_th_read",
+            "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids",
         ])
 
         total_junctions = sum(

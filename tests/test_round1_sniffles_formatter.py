@@ -144,7 +144,7 @@ class TestSnifflesTable(TemporaryTest):
             {'is_uuid': rows[0]['UUID'], 'chrom': rows[0]['Chrom'],
              'start': int(rows[0]['Start']), 'end': int(rows[0]['End']),
              'n_tail_head_reads': 1, 'n_genome_head_reads': 0, 'n_tail_genome_reads': 0},
-            insertion, '', '', 'S', 'longest_read')
+            insertion, '', '', 'S', 'longest_read', '', 0)
         self.assertEqual((record['insertion_site']['pos_5p'], record['insertion_site']['pos_3p']), (1000, 1000))
         self.assertEqual((record['is_element']['start'], record['is_element']['end']), (1000, 1000))
         self.assertEqual(record['is_element']['length'], 500)
