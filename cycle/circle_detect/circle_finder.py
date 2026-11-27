@@ -34,6 +34,7 @@ from .config import (
     DEFAULT_MIN_JUNCTION_OVERLAP,
     JUNCTION_FLANK,
     MAX_RECORDED_READS,
+    MULTIPASS_MIN_CLIP_COVERAGE,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,9 @@ READ_COLUMNS = [
 SUMMARY_COLUMNS = [
     "is_uuid", "chrom", "start", "end", "family", "subfamily",
     "consensus_length", "consensus", "target_duplication", "n_tail_head_reads", "n_tail_head_clipped_reads",
-    "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
-    "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids", "support_read_ids",
+    "n_multipass_circle_reads", "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
+    "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids", "multipass_read_ids",
+    "support_read_ids",
 ]
 
 
@@ -289,11 +291,19 @@ class CircleFinder:
         junction_map: dict[str, list[dict]],
         sample_id: str,
         trim_duplication: bool = False,
+        bait_path: Path | None = None,
     ) -> tuple[list[dict], dict[str, dict]]:
         """Scan BAM for reads spanning bait junctions.
 
         **Tail-head**: read alignment spans the junction at position N
         (center of ``[IS][IS]`` bait) by at least ``min_overlap`` on each side.
+        A read that crosses the junction and runs on past the bait is
+        ``tail_head_clipped`` (copies side by side in the genome), unless it is
+        longer than the element and every clipped end of ``min_overlap`` or more
+        maps back onto the element in the same direction: then it is
+        ``multipass_circle``, a read that went round a circle more than once.
+        Neither counts as tail-head evidence. Needs ``bait_path``; without it no
+        read is called multipass.
 
         **Genome-head**: read has a large left soft-clip (genomic) and its
         alignment starts near an IS copy boundary (0 or N on the TH bait).
@@ -313,6 +323,8 @@ class CircleFinder:
         th_example: dict[str, tuple[int, int, str, str, str]] = {}
         th_read_ids: dict[str, list[str]] = {}
         junction_gaps: dict[str, list[tuple[int, int]]] = {}  # uuid -> (start, length) per tail-head read
+        # Clipped tail-head reads longer than their element: index in junction_reads, bait name, clipped ends
+        multipass_candidates: list[tuple[int, str, list[str]]] = []
 
         tol = self.boundary_tolerance
         min_overlap = self.min_overlap
@@ -431,8 +443,21 @@ class CircleFinder:
                     "overlap_right": ref_end - junction_pos,
                     "mapping_quality": read.mapping_quality,
                 })
+                if junction_type == "tail_head_clipped" and read.query_length > n:
+                    clips = [c for c in (sequence[:left_clip], sequence[len(sequence) - right_clip:])
+                             if len(c) >= min_overlap]
+                    multipass_candidates.append((len(junction_reads) - 1, ref_name, clips))
 
         bam.close()
+
+        multipass_read_ids: dict[str, list[str]] = {}
+        if multipass_candidates and bait_path is not None:
+            for index in self._multipass_reads(multipass_candidates, bait_path):
+                row = junction_reads[index]
+                row["junction_type"] = "multipass_circle"
+                counts[row["is_uuid"]]["tail_head_clipped"] -= 1
+                counts[row["is_uuid"]]["multipass_circle"] = counts[row["is_uuid"]].get("multipass_circle", 0) + 1
+                multipass_read_ids.setdefault(row["is_uuid"], []).append(row["read_id"])
 
         # Build summary dict
         summary_by_uuid: dict[str, dict] = {}
@@ -472,6 +497,7 @@ class CircleFinder:
                 "target_duplication": duplication,
                 "n_tail_head_reads": uuid_counts.get("tail_head", 0),
                 "n_tail_head_clipped_reads": uuid_counts.get("tail_head_clipped", 0),
+                "n_multipass_circle_reads": uuid_counts.get("multipass_circle", 0),
                 "n_genome_head_reads": uuid_counts.get("genome_head", 0),
                 "n_tail_genome_reads": uuid_counts.get("tail_genome", 0),
                 "n_total_mapped": total_mapped.get(uuid, 0),
@@ -479,10 +505,45 @@ class CircleFinder:
                 "example_th_read_id": th_example[uuid][3] if uuid in th_example else "",
                 "junction_seq": th_example[uuid][4] if uuid in th_example else "",
                 "tail_head_read_ids": ",".join(th_read_ids.get(uuid, [])[:MAX_RECORDED_READS]),
+                "multipass_read_ids": ",".join(multipass_read_ids.get(uuid, [])[:MAX_RECORDED_READS]),
                 "support_read_ids": entry.rnames,
             }
 
         return junction_reads, summary_by_uuid
+
+    def _multipass_reads(self, candidates: list[tuple[int, str, list[str]]], bait_path: Path) -> list[int]:
+        """Candidates whose every clipped end maps back onto their own bait on the forward strand.
+
+        A clipped end counts when alignments to its own ``[IS][IS]`` bait, in the bait's
+        direction, cover MULTIPASS_MIN_CLIP_COVERAGE of it. The bait holds the element
+        twice, so an end that goes round once more is covered whole.
+        """
+        queries = bait_path.with_name(f".{bait_path.stem}.clips.fa")
+        queries.write_text("".join(
+            f">{index}_{k}\n{clip}\n" for index, _, clips in candidates for k, clip in enumerate(clips)
+        ))
+        result = subprocess.run(
+            ["minimap2", "-c", "-x", "map-ont", "-t", str(self.threads), str(bait_path), str(queries)],
+            capture_output=True, text=True, check=True,
+        )
+        queries.unlink()
+        spans: dict[tuple[str, str], list[tuple[int, int]]] = {}  # (clip, bait) -> query spans
+        for line in result.stdout.splitlines():
+            fields = line.split("\t")
+            if fields[4] == "+":
+                spans.setdefault((fields[0], fields[5]), []).append((int(fields[2]), int(fields[3])))
+        found = []
+        for index, bait, clips in candidates:
+            for k, clip in enumerate(clips):
+                covered, end = 0, 0
+                for start, stop in sorted(spans.get((f"{index}_{k}", bait), [])):
+                    covered += max(0, stop - max(start, end))
+                    end = max(end, stop)
+                if covered < MULTIPASS_MIN_CLIP_COVERAGE * len(clip):
+                    break
+            else:
+                found.append(index)
+        return found
 
     @staticmethod
     def _query_pos(cigar, ref_start, ref_pos):
@@ -597,7 +658,7 @@ class CircleFinder:
             return None
 
         junction_reads, summary_by_uuid = self._find_junction_reads(
-            bam, entries_by_uuid, junction_map, sample_id, trim_duplication,
+            bam, entries_by_uuid, junction_map, sample_id, trim_duplication, bait_path,
         )
 
         logger.info(

@@ -135,6 +135,8 @@ class ISFormatter:
                     "consensus": consensus,
                     "n_tail_head_reads": n_th,
                     "n_tail_head_clipped_reads": int(row.get("n_tail_head_clipped_reads") or 0),
+                    "n_multipass_circle_reads": int(row.get("n_multipass_circle_reads") or 0),
+                    "multipass_read_ids": [r for r in (row.get("multipass_read_ids") or "").split(",") if r],
                     "n_genome_head_reads": int(row.get("n_genome_head_reads", 0)),
                     "n_tail_genome_reads": int(row.get("n_tail_genome_reads", 0)),
                     "n_total_mapped": n_total,
@@ -617,15 +619,17 @@ class ISFormatter:
             best = max(copies, key=lambda r: r["circle_evidence"]["n_tail_head_reads"])["circle_evidence"]
             shared = {
                 key: sum(r["circle_evidence"][key] for r in copies)
-                for key in ("n_tail_head_reads", "n_tail_head_clipped_reads",
+                for key in ("n_tail_head_reads", "n_tail_head_clipped_reads", "n_multipass_circle_reads",
                             "n_genome_head_reads", "n_tail_genome_reads")
             }
             read_ids = [i for r in copies for i in r["circle_evidence"]["tail_head_read_ids"]]
+            multipass_ids = [i for r in copies for i in r["circle_evidence"]["multipass_read_ids"]]
             for record in copies:
                 record["n_copies"] = len(copies)
                 record["element_group"] = name
                 record["circle_evidence"] = {
-                    **best, **shared, "tail_head_read_ids": read_ids, "evidence_level": "element",
+                    **best, **shared, "tail_head_read_ids": read_ids, "multipass_read_ids": multipass_ids,
+                    "evidence_level": "element",
                 }
                 record["evidence"] = "tail_head_reads" if shared["n_tail_head_reads"] > 0 else "none"
 
@@ -671,6 +675,11 @@ class ISFormatter:
                 # Reads that cross the junction but continue outside the element: copies
                 # side by side in the genome, not a circle.
                 "n_tail_head_clipped_reads": is_info.get("n_tail_head_clipped_reads", 0),
+                # Reads longer than the element that cross the junction and whose clipped ends
+                # go round the element again: likely a circle read more than once, kept apart
+                # because a tandem array of three or more copies looks the same.
+                "n_multipass_circle_reads": is_info.get("n_multipass_circle_reads", 0),
+                "multipass_read_ids": is_info.get("multipass_read_ids", []),
                 "n_genome_head_reads": is_info["n_genome_head_reads"],
                 "n_tail_genome_reads": is_info["n_tail_genome_reads"],
                 "example_th_read": is_info.get("example_th_read", ""),
@@ -1010,7 +1019,8 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
         "assembly_method",
         "evidence", "target_duplication", "junction_seq", "example_th_read_id",
         "tail_head_read_ids", "sequence_read_id", "n_element_reads",
-        "flank_status", "n_copies", "element_group", "evidence_level", "n_th_clipped_reads", "support_read_ids",
+        "flank_status", "n_copies", "element_group", "evidence_level", "n_th_clipped_reads",
+        "n_multipass_reads", "multipass_read_ids", "support_read_ids",
     ]
 
     rows: list[dict] = []
@@ -1045,6 +1055,8 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
             "element_group": rec["element_group"],
             "evidence_level": rec["circle_evidence"]["evidence_level"],
             "n_th_clipped_reads": rec["circle_evidence"]["n_tail_head_clipped_reads"],
+            "n_multipass_reads": rec["circle_evidence"]["n_multipass_circle_reads"],
+            "multipass_read_ids": ",".join(rec["circle_evidence"]["multipass_read_ids"]),
             "support_read_ids": ",".join(rec["support_read_ids"]),
         })
 

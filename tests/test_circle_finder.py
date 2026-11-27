@@ -408,5 +408,63 @@ class TestParseHeaders(unittest.TestCase):
             self.assertEqual(jmap["uuid1__len1000"][0]["type"], "tail_head")
 
 
+class TestMultipassCircleReads(unittest.TestCase):
+    """Clipped junction reads whose clipped ends go round the element again."""
+
+    def setUp(self):
+        import random
+        import shutil
+        if not shutil.which("minimap2"):
+            self.skipTest("minimap2 not on PATH")
+        rng = random.Random(7)
+        self.element = "".join(rng.choice("ACGT") for _ in range(1000))
+        self.genome = "".join(rng.choice("ACGT") for _ in range(300))
+        self.tmp = tempfile.TemporaryDirectory()
+        from pathlib import Path
+        self.bait = Path(self.tmp.name) / "s_bait.fa"
+        self.bait.write_text(f">is1__th__j1000\n{self.element * 2}\n")
+        self.finder = _make_finder(min_overlap=100, boundary_tolerance=50)
+        self.entries = {"is1": ISEntry(uuid="is1", chrom="chr1", start=5000, end=5000, family="INS",
+                                       subfamily="NA", consensus=self.element)}
+        self.jmap = {"is1__th__j1000": [{"type": "tail_head", "position": 1000, "uuid": "is1"}]}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run(self, left, right, aligned=(100, 1900)):
+        start, end = aligned
+        middle = (self.element * 2)[start:end]
+        cigar = ([(4, len(left))] if left else []) + [(0, end - start)] + ([(4, len(right))] if right else [])
+        sequence = left + middle + right
+        read = _mock_read("is1__th__j1000", start, end, cigar, query_length=len(sequence), query_sequence=sequence)
+        mock_bam = MagicMock()
+        mock_bam.fetch.return_value = [read]
+        with patch("pysam.AlignmentFile", return_value=mock_bam):
+            return self.finder._find_junction_reads("/fake.bam", self.entries, self.jmap, "s", bait_path=self.bait)
+
+    def test_clips_round_the_element_again(self):
+        reads, summary = self._run(self.element[500:1000], self.element[900:1000] + self.element[:300])
+        self.assertEqual(reads[0]["junction_type"], "multipass_circle")
+        self.assertEqual(summary["is1"]["n_multipass_circle_reads"], 1)
+        self.assertEqual(summary["is1"]["n_tail_head_clipped_reads"], 0)
+        self.assertEqual(summary["is1"]["n_tail_head_reads"], 0)
+        self.assertEqual(summary["is1"]["multipass_read_ids"], "read1")
+
+    def test_clip_into_the_genome(self):
+        reads, summary = self._run(self.element[500:1000], self.genome)
+        self.assertEqual(reads[0]["junction_type"], "tail_head_clipped")
+        self.assertEqual(summary["is1"]["n_multipass_circle_reads"], 0)
+
+    def test_clip_on_the_other_strand(self):
+        complement = {"A": "T", "C": "G", "G": "C", "T": "A"}
+        reverse = "".join(complement[b] for b in reversed(self.element[:300]))
+        reads, _ = self._run("", reverse)
+        self.assertEqual(reads[0]["junction_type"], "tail_head_clipped")
+
+    def test_read_not_longer_than_the_element(self):
+        reads, _ = self._run("", self.element[200:500], aligned=(800, 1200))
+        self.assertEqual(reads[0]["junction_type"], "tail_head_clipped")
+
+
 if __name__ == "__main__":
     unittest.main()

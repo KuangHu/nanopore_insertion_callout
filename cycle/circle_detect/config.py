@@ -10,3 +10,4 @@ DEFAULT_MIN_DUPLICATION_READS = 3  # tail-head reads that must agree before a ta
 DEFAULT_JUNCTION_WINDOW = 5  # deletions this close to the bait junction count towards the duplication
 JUNCTION_FLANK = 30  # read bases recorded on each side of a junction
 MAX_RECORDED_READS = 50  # tail-head read ids copied into the summary; the reads table lists all
+MULTIPASS_MIN_CLIP_COVERAGE = 0.8  # share of a clipped end that must map back onto the element, same direction
