@@ -269,21 +269,25 @@ class PartialCircleDetector:
             if not ref_name or ref_name not in is_id_set:
                 continue
 
-            # Get query coordinates (how much of the read is aligned)
-            pairs = read.get_aligned_pairs(matches_only=False)
-            query_positions = [
-                qpos for qpos, rpos in pairs if qpos is not None and rpos is not None
-            ]
-            if not query_positions:
+            # Position of the aligned part in the whole read. A supplementary record is hard
+            # clipped, so its stored sequence starts at the aligned part: count the leading
+            # clip, hard or soft, from the CIGAR.
+            cigar = read.cigartuples
+            if not cigar or not read.query_alignment_length:
                 continue
+            query_start = 0
+            for op, length in cigar:
+                if op not in (4, 5):
+                    break
+                query_start += length
 
             seg = SplitSegment(
                 read_name=read.query_name,
                 is_id=ref_name,
                 ref_start=read.reference_start,
                 ref_end=read.reference_end,
-                query_start=min(query_positions),
-                query_end=max(query_positions) + 1,
+                query_start=query_start,
+                query_end=query_start + read.query_alignment_length,
                 is_reverse=read.is_reverse,
                 mapping_quality=read.mapping_quality,
             )

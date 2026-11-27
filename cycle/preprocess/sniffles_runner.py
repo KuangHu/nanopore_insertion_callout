@@ -304,23 +304,25 @@ class SnifflesRunner:
         n_written = 0
 
         try:
+            # One record per read. A supplementary record is hard clipped and holds only
+            # part of the read, so the longest stored sequence is kept (the primary if present).
+            longest = {}
             with pysam.AlignmentFile(str(bam_path), "rb") as bam:
-                with open(fastq_path, "w") as fq:
-                    for read in bam.fetch(chrom, start, end):
-                        if read.query_name in rname_set and read.query_sequence:
-                            qual = read.query_qualities
-                            qual_str = (
-                                "".join(chr(q + 33) for q in qual)
-                                if qual is not None
-                                else "I" * len(read.query_sequence)
-                            )
-                            fq.write(
-                                f"@{read.query_name}\n"
-                                f"{read.query_sequence}\n"
-                                f"+\n"
-                                f"{qual_str}\n"
-                            )
-                            n_written += 1
+                for read in bam.fetch(chrom, start, end):
+                    if read.query_name in rname_set and read.query_sequence:
+                        kept = longest.get(read.query_name)
+                        if kept is None or len(read.query_sequence) > len(kept[0]):
+                            # Stored sequences follow the reference strand; either strand assembles.
+                            longest[read.query_name] = (read.query_sequence, read.query_qualities)
+            with open(fastq_path, "w") as fq:
+                for name, (sequence, qual) in longest.items():
+                    qual_str = (
+                        "".join(chr(q + 33) for q in qual)
+                        if qual is not None
+                        else "I" * len(sequence)
+                    )
+                    fq.write(f"@{name}\n{sequence}\n+\n{qual_str}\n")
+                    n_written += 1
         except Exception as exc:
             logger.debug(f"Failed to extract reads at {chrom}:{pos}: {exc}")
             return None
