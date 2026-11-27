@@ -82,7 +82,8 @@ class PartialCircleCall:
 
     @property
     def n_supporting_reads(self) -> int:
-        return len(self.supporting_reads)
+        # Distinct reads: one read can cross the same junction several times
+        return len({r.read_name for r in self.supporting_reads})
 
     @property
     def mean_mapq(self) -> float:
@@ -353,6 +354,13 @@ class PartialCircleDetector:
                     if seg_a.ref_end <= seg_b.ref_start:
                         continue  # forward jump — normal, not a back-jump
 
+                    # Two overlapping pieces of one unrearranged alignment lie on the same
+                    # diagonal (reference position minus read position): not a jump.
+                    diagonal_a = seg_a.ref_start - seg_a.query_start
+                    diagonal_b = seg_b.ref_start - seg_b.query_start
+                    if diagonal_a - diagonal_b <= self.breakpoint_tolerance:
+                        continue
+
                     # Circle = [seg_b.ref_start, seg_a.ref_end]
                     circle_start = seg_b.ref_start
                     circle_end = seg_a.ref_end
@@ -417,22 +425,18 @@ class PartialCircleDetector:
             # Single-linkage clustering
             clusters: list[list[BackJump]] = []
             for bj in jumps:
-                merged = False
-                for cluster in clusters:
-                    # Check if this back-jump is close to any member
-                    for member in cluster:
-                        if (abs(bj.circle_start - member.circle_start) <= tol
-                                and abs(bj.circle_end - member.circle_end) <= tol):
-                            cluster.append(bj)
-                            merged = True
-                            break
-                    if merged:
-                        break
-                if not merged:
-                    clusters.append([bj])
+                # Every cluster with a member close to this back-jump is joined through it
+                near = [
+                    cluster for cluster in clusters
+                    if any(abs(bj.circle_start - member.circle_start) <= tol
+                           and abs(bj.circle_end - member.circle_end) <= tol
+                           for member in cluster)
+                ]
+                clusters = [cluster for cluster in clusters if not any(cluster is c for c in near)]
+                clusters.append([member for cluster in near for member in cluster] + [bj])
 
             for cluster in clusters:
-                if len(cluster) < self.min_supporting_reads:
+                if len({bj.read_name for bj in cluster}) < self.min_supporting_reads:
                     continue
 
                 med_start = int(median(bj.circle_start for bj in cluster))

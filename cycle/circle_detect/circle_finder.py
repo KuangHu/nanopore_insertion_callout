@@ -47,7 +47,7 @@ READ_COLUMNS = [
 ]
 SUMMARY_COLUMNS = [
     "is_uuid", "chrom", "start", "end", "family", "subfamily",
-    "consensus_length", "consensus", "target_duplication", "n_tail_head_reads",
+    "consensus_length", "consensus", "target_duplication", "n_tail_head_reads", "n_tail_head_clipped_reads",
     "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
     "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids",
 ]
@@ -351,8 +351,14 @@ class CircleFinder:
             # either gap-free or with one short deletion (a target site duplication).
             gap = self._junction_gap(cigar, ref_start, junction_pos, min_overlap)
             if gap is not None:
-                detected_types.append("tail_head")
-                junction_gaps.setdefault(uuid, []).append(gap)
+                # A read of an excised circle is at most one element long and lies wholly
+                # in the bait. A read that crosses the junction but carries on outside the
+                # bait comes from two copies side by side in the genome: counted apart.
+                if left_clip >= min_overlap or right_clip >= min_overlap:
+                    detected_types.append("tail_head_clipped")
+                else:
+                    detected_types.append("tail_head")
+                    junction_gaps.setdefault(uuid, []).append(gap)
 
             # Genome-head: left soft-clip is genomic, alignment starts
             # near an IS copy boundary (position 0 or N)
@@ -378,7 +384,7 @@ class CircleFinder:
                 )
 
                 # Where the junction falls in the read as aligned, and the bases around it.
-                if junction_type == "tail_head":
+                if junction_type in ("tail_head", "tail_head_clipped"):
                     query_pos = self._query_pos(cigar, ref_start, junction_pos)
                 elif junction_type == "genome_head":
                     query_pos = left_clip
@@ -462,6 +468,7 @@ class CircleFinder:
                 "consensus": consensus,
                 "target_duplication": duplication,
                 "n_tail_head_reads": uuid_counts.get("tail_head", 0),
+                "n_tail_head_clipped_reads": uuid_counts.get("tail_head_clipped", 0),
                 "n_genome_head_reads": uuid_counts.get("genome_head", 0),
                 "n_tail_genome_reads": uuid_counts.get("tail_genome", 0),
                 "n_total_mapped": total_mapped.get(uuid, 0),

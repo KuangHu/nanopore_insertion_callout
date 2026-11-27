@@ -129,6 +129,7 @@ class ISFormatter:
                     "consensus_length": int(row.get("consensus_length", 0)),
                     "consensus": consensus,
                     "n_tail_head_reads": n_th,
+                    "n_tail_head_clipped_reads": int(row.get("n_tail_head_clipped_reads") or 0),
                     "n_genome_head_reads": int(row.get("n_genome_head_reads", 0)),
                     "n_tail_genome_reads": int(row.get("n_tail_genome_reads", 0)),
                     "n_total_mapped": n_total,
@@ -565,6 +566,9 @@ class ISFormatter:
             },
             "circle_evidence": {
                 "n_tail_head_reads": is_info["n_tail_head_reads"],
+                # Reads that cross the junction but continue outside the element: copies
+                # side by side in the genome, not a circle.
+                "n_tail_head_clipped_reads": is_info.get("n_tail_head_clipped_reads", 0),
                 "n_genome_head_reads": is_info["n_genome_head_reads"],
                 "n_tail_genome_reads": is_info["n_tail_genome_reads"],
                 "example_th_read": is_info.get("example_th_read", ""),
