@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+import pysam
+
 from ..processes import run_checked_pipe
 from .config import (
     DEFAULT_ALIGNMENT_DIR,
@@ -104,13 +106,21 @@ class Aligner:
         bam = self.output_dir / f"{sample_id}.sorted.bam"
         pending_bam = bam.with_name(f".{bam.stem}.pending.bam")
 
-        if bam.exists() and Path(str(bam) + ".bai").exists():
-            logger.info(f"BAM exists: {bam}")
-            return bam
-
         # Prefer .mmi if available
         mmi = reference.with_suffix(".mmi")
         ref = mmi if mmi.exists() else reference
+
+        # Reuse a BAM only when its minimap2 command line names this reference and preset
+        if bam.exists() and Path(str(bam) + ".bai").exists():
+            try:
+                with pysam.AlignmentFile(str(bam), "rb", check_sq=False) as handle:
+                    commands = [pg.get("CL", "") for pg in handle.header.to_dict().get("PG", []) if pg.get("PN") == "minimap2"]
+            except (OSError, ValueError):
+                commands = []
+            if any(str(ref) in cl.split() and f"-x {self.preset}" in cl for cl in commands):
+                logger.info(f"BAM exists: {bam}")
+                return bam
+            logger.info(f"BAM {bam} was made with another reference or preset; realigning")
 
         # minimap2 -a | samtools sort → BAM (pipe-based, no intermediate SAM)
         # --MD flag is required for Sniffles2 to parse alignments correctly
