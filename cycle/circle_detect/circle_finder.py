@@ -25,6 +25,7 @@ from ..processes import run_checked_pipe
 from ..utils import find_fastq
 from .config import (
     DEFAULT_BOUNDARY_TOLERANCE,
+    DEFAULT_MAX_TARGET_DUPLICATION,
     DEFAULT_CIRCLE_OUTPUT_DIR,
     DEFAULT_MIN_CONSENSUS_ENTROPY,
     DEFAULT_MIN_CONSENSUS_LENGTH,
@@ -285,6 +286,7 @@ class CircleFinder:
         counts: dict[str, dict[str, int]] = {}  # uuid -> {type -> count}
         # uuid -> (mapq, length, sequence) for best tail-head example read
         th_example: dict[str, tuple[int, int, str]] = {}
+        junction_gaps: dict[str, list[tuple[int, int]]] = {}  # uuid -> (start, length) per tail-head read
 
         tol = self.boundary_tolerance
         min_overlap = self.min_overlap
@@ -322,10 +324,12 @@ class CircleFinder:
 
             detected_types: list[str] = []
 
-            # Count query-aligned anchors and require a match block across the
-            # junction. A reference span through D/N is not junction evidence.
-            if self._has_junction_anchor(cigar, ref_start, junction_pos, min_overlap):
+            # Count query-aligned anchors and require the junction to be crossed,
+            # either gap-free or with one short deletion (a target site duplication).
+            gap = self._junction_gap(cigar, ref_start, junction_pos, min_overlap)
+            if gap is not None:
                 detected_types.append("tail_head")
+                junction_gaps.setdefault(uuid, []).append(gap)
 
             # Genome-head: left soft-clip is genomic, alignment starts
             # near an IS copy boundary (position 0 or N)
@@ -383,15 +387,32 @@ class CircleFinder:
         summary_by_uuid: dict[str, dict] = {}
         for uuid, entry in entries_by_uuid.items():
             uuid_counts = counts.get(uuid, {})
+            # The insertion caller cannot tell the element from its target site duplication: it
+            # reports the two together, so the bait junction holds the duplicated bases and reads
+            # of the excised circle show them as a deletion. When most tail-head reads agree on
+            # one deletion, cut the consensus back to the element and move the position with it.
+            consensus = entry.consensus
+            shift = 0
+            duplication = ""
+            gaps = junction_gaps.get(uuid, [])
+            if gaps:
+                duplication, votes = Counter(length for _, length in gaps).most_common(1)[0]
+                if votes * 2 <= len(gaps):
+                    duplication = ""
+                elif duplication:
+                    gap_start = Counter(start for start, length in gaps if length == duplication).most_common(1)[0][0]
+                    shift = gap_start + duplication - len(entry.consensus)
+                    consensus = entry.consensus[shift:gap_start]
             summary_by_uuid[uuid] = {
                 "is_uuid": uuid,
                 "chrom": entry.chrom,
-                "start": entry.start,
-                "end": entry.end,
+                "start": entry.start + shift,
+                "end": entry.end + shift - (duplication or 0),
                 "family": entry.family,
                 "subfamily": entry.subfamily,
-                "consensus_length": len(entry.consensus),
-                "consensus": entry.consensus,
+                "consensus_length": len(consensus),
+                "consensus": consensus,
+                "target_duplication": duplication,
                 "n_tail_head_reads": uuid_counts.get("tail_head", 0),
                 "n_genome_head_reads": uuid_counts.get("genome_head", 0),
                 "n_tail_genome_reads": uuid_counts.get("tail_genome", 0),
@@ -402,16 +423,18 @@ class CircleFinder:
         return junction_reads, summary_by_uuid
 
     @staticmethod
-    def _has_junction_anchor(cigar, ref_start, junction_pos, min_overlap):
-        """Require aligned bases on both sides and a gap-free junction itself.
+    def _junction_gap(cigar, ref_start, junction_pos, min_overlap):
+        """Return the deletion a read has at the bait junction, or None if it is not junction evidence.
 
-        Indels away from the junction may occur in noisy reads, but cannot
-        contribute bases to either anchor or stand in for a junction bridge.
+        ``(junction_pos, 0)`` means aligned bases run straight across the junction.
+        ``(start, length)`` means one deletion of at most DEFAULT_MAX_TARGET_DUPLICATION bases
+        contains or touches the junction. Both sides need ``min_overlap`` aligned bases; indels
+        away from the junction may occur in noisy reads but add nothing to either anchor.
         """
         ref_pos = ref_start
         block_start = None
         left_bases = right_bases = 0
-        bridged = False
+        gap = None
         for op, length in cigar or []:
             if op in (0, 7, 8):  # consumes both reference and query
                 if block_start is None:
@@ -419,13 +442,19 @@ class CircleFinder:
                 end = ref_pos + length
                 left_bases += max(0, min(end, junction_pos) - ref_pos)
                 right_bases += max(0, end - max(ref_pos, junction_pos))
-                bridged |= block_start < junction_pos < end
+                if block_start < junction_pos < end:
+                    gap = (junction_pos, 0)
                 ref_pos = end
             else:
                 if op in (2, 3):  # deletion or reference skip
+                    if (op == 2 and length <= DEFAULT_MAX_TARGET_DUPLICATION
+                            and ref_pos <= junction_pos <= ref_pos + length):
+                        gap = (ref_pos, length)
                     ref_pos += length
                 block_start = None
-        return bridged and left_bases >= min_overlap and right_bases >= min_overlap
+        if left_bases < min_overlap or right_bases < min_overlap:
+            return None
+        return gap
 
     # ------------------------------------------------------------------
     # Public API
@@ -494,7 +523,7 @@ class CircleFinder:
         summary_rows = list(summary_by_uuid.values())
         _write_tsv(summary_tsv, summary_rows, [
             "is_uuid", "chrom", "start", "end", "family", "subfamily",
-            "consensus_length", "consensus", "n_tail_head_reads",
+            "consensus_length", "consensus", "target_duplication", "n_tail_head_reads",
             "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
             "example_th_read",
         ])

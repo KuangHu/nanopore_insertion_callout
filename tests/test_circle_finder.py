@@ -95,6 +95,50 @@ class TestFindJunctionReads(unittest.TestCase):
                 _, summary = self._run([read])
                 self.assertEqual(summary['is1']['n_tail_head_reads'], 0)
 
+    def _duplication_entry(self):
+        """Element E (990 bp) called by the insertion caller as T + E, with T a 10 bp target duplication."""
+        import random
+        rng = random.Random(1)
+        self.element = "".join(rng.choice("ACGT") for _ in range(990))
+        self.entry.consensus = "ACGTACGTAC" + self.element
+
+    def test_junction_deletion_sets_the_element_ends(self):
+        """Circle reads lack the duplicated bases at the bait junction; the element is cut back to its own ends."""
+        self._duplication_entry()
+        reads = [_mock_read('is1__th__j1000', 800, 1210, [(0, 200), (2, 10), (0, 200)], query_name=f'r{i}')
+                 for i in range(3)]
+        _, summary = self._run(reads)
+        self.assertEqual(summary['is1']['n_tail_head_reads'], 3)
+        self.assertEqual(summary['is1']['target_duplication'], 10)
+        self.assertEqual(summary['is1']['consensus'], self.element)
+        self.assertEqual(summary['is1']['consensus_length'], 990)
+        self.assertEqual(summary['is1']['start'], 5010)
+
+    def test_junction_deletion_before_the_junction(self):
+        """The same duplication, placed by the aligner on the other side of the junction, gives the rotated cut."""
+        self._duplication_entry()
+        reads = [_mock_read('is1__th__j1000', 800, 1210, [(0, 190), (2, 10), (0, 210)], query_name=f'r{i}')
+                 for i in range(3)]
+        _, summary = self._run(reads)
+        self.assertEqual(summary['is1']['target_duplication'], 10)
+        self.assertEqual(summary['is1']['consensus'], self.entry.consensus[:990])
+        self.assertEqual(summary['is1']['start'], 5000)
+
+    def test_gap_free_junction_reads_keep_the_called_element(self):
+        self._duplication_entry()
+        reads = [_mock_read('is1__th__j1000', 800, 1200, [(0, 400)], query_name=f'r{i}') for i in range(3)]
+        reads.append(_mock_read('is1__th__j1000', 800, 1202, [(0, 200), (2, 2), (0, 200)], query_name='noisy'))
+        _, summary = self._run(reads)
+        self.assertEqual(summary['is1']['n_tail_head_reads'], 4)
+        self.assertEqual(summary['is1']['target_duplication'], 0)
+        self.assertEqual(summary['is1']['consensus'], self.entry.consensus)
+        self.assertEqual(summary['is1']['start'], 5000)
+
+    def test_no_junction_reads_leave_the_duplication_unknown(self):
+        _, summary = self._run([])
+        self.assertEqual(summary['is1']['target_duplication'], '')
+        self.assertEqual(summary['is1']['consensus'], self.entry.consensus)
+
     def test_reference_span_does_not_replace_query_anchors(self):
         read = _mock_read('is1__th__j1000', 800, 1200,
                           [(0, 50), (2, 140), (0, 210)])
