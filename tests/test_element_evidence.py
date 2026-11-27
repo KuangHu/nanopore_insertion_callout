@@ -15,7 +15,7 @@ def record(sequence, orfs, evidence="none"):
 
 
 class ElementEvidence(unittest.TestCase):
-    def run_on(self, records, blast_rows, domain_rows):
+    def run_on(self, records, blast_rows, domain_rows, entry_strands=None):
         def fake(cmd, **kwargs):
             if cmd[0] == "blastn":
                 return subprocess.CompletedProcess(cmd, 0, "".join(row + "\n" for row in blast_rows), "")
@@ -25,6 +25,8 @@ class ElementEvidence(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "S_is_records_annotated.json"
             path.write_text(json.dumps(records))
+            if entry_strands:
+                (Path(tmp) / "db.tnp_strand.tsv").write_text("".join(f"{e}\t{st}\n" for e, st in entry_strands.items()))
             with patch("cycle.element_evidence.subprocess.run", side_effect=fake):
                 annotate_sample(path, Path(tmp) / "db", Path(tmp) / "hmm")
             return json.loads(path.read_text())
@@ -56,6 +58,22 @@ class ElementEvidence(unittest.TestCase):
         self.assertEqual(out["evidence"], "tail_head_reads")
         out = self.run_on([record("A" * 1000, orfs)], [], [("0_0", "DEDD_Tnp_IS110", 80.0)])[0]
         self.assertEqual(out["evidence"], "transposase_domain")
+
+    def test_entry_stored_with_its_transposase_on_the_minus_strand(self):
+        """A plus-strand hit to an entry whose own transposase is on its minus strand predicts a minus ORF."""
+        orfs = [{"start": 1, "end": 300, "strand": "-", "protein_sequence": "MKV*"}]
+        out = self.run_on([record("A" * 1000, orfs)],
+                          ["0\tIS609_IS200/IS605_IS605\t98\t990\t5\t995\t10\t1000\t0\t1800\t1000"],
+                          [("0_0", "Y1_Tnp", 130.0)], {"IS609_IS200/IS605_IS605": "-"})[0]
+        self.assertEqual((out["orientation"], out["orientation_status"]), ("+", "agree"))
+
+    def test_transposase_beside_the_hit(self):
+        """The best transposase ORF lies outside the matched element: two elements, no single orientation check."""
+        orfs = [{"start": 1600, "end": 2700, "strand": "-", "protein_sequence": "MKV*"}]
+        out = self.run_on([record("A" * 2800, orfs)],
+                          ["0\tISLpn2_IS4_IS50\t99\t1500\t9\t1506\t1\t1498\t0\t2700\t1498"],
+                          [("0_0", "DDE_Tnp_ISL3", 216.0)], {"ISLpn2_IS4_IS50": "+"})[0]
+        self.assertEqual((out["orientation"], out["orientation_status"]), ("+", "two_elements"))
 
 
 if __name__ == "__main__":

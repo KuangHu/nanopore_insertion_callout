@@ -36,7 +36,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-    db = build_isfinder_db(Path(args.isfinder_fasta), Path(args.db_dir))
+    db = build_isfinder_db(Path(args.isfinder_fasta), Path(args.db_dir), Path(args.transposase_hmm), args.parallel)
     paths = sorted(Path(args.input_dir).glob("*/*_is_records_annotated.json"))
     if args.sample_list:
         with open(args.sample_list, newline="") as handle:

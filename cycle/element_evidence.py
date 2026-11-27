@@ -15,8 +15,16 @@ every record:
 Record sequences are on the reference strand, so a minus orientation means
 the element's 5' end is at the record's end and ``flanking_upstream`` lies on
 its 3' side. Non-coding regions get ``element_end`` in the element's own
-direction (the ORF annotator's ``type`` follows the record). ISfinder entries, and the transposase ORFs of most families, run
-5' to 3'; when the two disagree the ISfinder strand is used.
+direction (the ORF annotator's ``type`` follows the record). Orientation
+follows the ISfinder entry, which is stored from the element's left end.
+
+Some entries carry their transposase on the minus strand (many IS200/IS605,
+some IS3, IS256, IS110), so the ORF strand is compared with the strand the
+entry's own transposase ORF predicts: found once per database with prodigal
+and the same Pfam models. ``orientation_status`` is "two_elements" when the
+best transposase ORF lies outside the ISfinder hit: the record then holds
+another element beside the matched one and has no single orientation (the
+ISfinder strand is kept).
 
 ``evidence`` stays "tail_head_reads" when the record has them; otherwise it
 becomes "is_reference_hit" for an ISfinder hit, "transposase_domain" for a
@@ -38,18 +46,43 @@ MIN_HIT_COVERAGE = 0.5   # fraction of the record covered by the best ISfinder h
 MAX_HIT_EVALUE = 1e-10
 
 
-def build_isfinder_db(fasta: Path, out_dir: Path) -> Path:
-    """BLAST database of the ISfinder FASTA, rebuilt when the FASTA content changes."""
+def build_isfinder_db(fasta: Path, out_dir: Path, hmm: Path, threads: int = 1) -> Path:
+    """BLAST database of the ISfinder FASTA and each entry's transposase strand.
+
+    Rebuilt when the FASTA or the HMM file changes. The strands go to
+    ``<prefix>.tnp_strand.tsv``: entry name, strand of its best-scoring
+    transposase ORF.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     prefix = out_dir / "isfinder"
     key_path = Path(f"{prefix}.source")
-    key = hashlib.sha256(Path(fasta).read_bytes()).hexdigest()
-    files = [Path(f"{prefix}{suffix}") for suffix in (".nhr", ".nin", ".nsq")]
+    key = hashlib.sha256(Path(fasta).read_bytes() + Path(hmm).read_bytes()).hexdigest()
+    files = [Path(f"{prefix}{suffix}") for suffix in (".nhr", ".nin", ".nsq", ".tnp_strand.tsv")]
     if all(f.exists() for f in files) and key_path.exists() and key_path.read_text() == key:
         return prefix
     key_path.unlink(missing_ok=True)
     subprocess.run(["makeblastdb", "-in", str(fasta), "-dbtype", "nucl", "-out", str(prefix)],
                    check=True, capture_output=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        subprocess.run(["prodigal", "-p", "meta", "-q", "-i", str(fasta), "-a", str(work / "orfs.faa"),
+                        "-o", "/dev/null"], check=True, capture_output=True)
+        proteins, strands, name = {}, {}, None
+        for line in (work / "orfs.faa").read_text().splitlines():
+            if line.startswith(">"):
+                fields = line[1:].split(" # ")
+                name = fields[0].split()[0]
+                strands[name] = "+" if fields[3] == "1" else "-"
+                proteins[name] = ""
+            else:
+                proteins[name] += line
+        best: dict[str, tuple[float, str]] = {}
+        for orf, found in _transposase_domains(proteins, hmm, work, threads).items():
+            entry = orf.rsplit("_", 1)[0]
+            score = max(s for _, s in found)
+            if entry not in best or score > best[entry][0]:
+                best[entry] = (score, strands[orf])
+    Path(f"{prefix}.tnp_strand.tsv").write_text("".join(f"{e}\t{strand}\n" for e, (_, strand) in sorted(best.items())))
     key_path.write_text(key)
     return prefix
 
@@ -75,6 +108,8 @@ def _isfinder_hits(sequences: dict[str, str], db: Path, work: Path, threads: int
         parts = s.split("_")
         best[q] = {
             "name": s,
+            "query_start": int(qs),
+            "query_end": int(qe),
             "family": parts[-2] if len(parts) >= 3 else "",
             "group": parts[-1] if len(parts) >= 3 else "",
             "pident": float(pident),
@@ -106,6 +141,10 @@ def _transposase_domains(proteins: dict[str, str], hmm: Path, work: Path, thread
 def annotate_sample(json_path: Path, db: Path, hmm: Path, threads: int = 1) -> Path:
     """Add ISfinder hits, transposase domains and orientation to one annotated JSON, in place."""
     records = json.loads(json_path.read_text())
+    entry_strand = {}
+    strand_table = Path(f"{db}.tnp_strand.tsv")
+    if strand_table.exists():
+        entry_strand = dict(line.split("\t") for line in strand_table.read_text().splitlines())
     sequences = {str(i): r["is_element"]["sequence"] for i, r in enumerate(records) if r["is_element"]["sequence"]}
     proteins = {}
     for i, record in enumerate(records):
@@ -130,8 +169,13 @@ def annotate_sample(json_path: Path, db: Path, hmm: Path, threads: int = 1) -> P
                     best_orf, best_score = orf, score
         by_orf = best_orf["strand"] if best_orf else ""
         by_hit = hit["strand"] if hit else ""
-        if by_orf and by_hit:
-            status = "agree" if by_orf == by_hit else "disagree"
+        if by_orf and by_hit and (best_orf["end"] < hit["query_start"] or best_orf["start"] > hit["query_end"]):
+            status = "two_elements"
+        elif by_orf and by_hit:
+            # The ORF strand the hit predicts: the hit strand, turned over when the entry's own
+            # transposase is on its minus strand.
+            expected = by_hit if entry_strand.get(hit["name"], "+") == "+" else {"+": "-", "-": "+"}[by_hit]
+            status = "agree" if by_orf == expected else "disagree"
         else:
             status = "orf_only" if by_orf else "isfinder_only" if by_hit else "none"
         record["isfinder_hit"] = hit
