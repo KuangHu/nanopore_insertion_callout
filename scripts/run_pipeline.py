@@ -668,6 +668,7 @@ def main():
         format_results = formatter.run_batch(
             circle_results=circle_results,
             parallel=args.parallel,
+            platforms=dict(zip(metadata["srr_accession"], metadata.get("platform", pd.Series(dtype=str)).fillna(""))),
         )
 
         ok = sum(1 for v in format_results.values() if v)

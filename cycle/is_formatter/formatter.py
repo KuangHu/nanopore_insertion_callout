@@ -565,12 +565,12 @@ class ISFormatter:
             polished = "".join(lines[1:])
         return polished
 
-    def _group_copies(self, records: list[dict], work_dir: Path) -> None:
+    def _group_copies(self, records: list[dict], work_dir: Path, min_identity: float) -> None:
         """Share circle evidence between the copies of one element in a sample.
 
         A circle read fits every copy of its element equally well and the mapper
         gives it to one of them, so the counts per copy mean nothing. Records
-        whose sequences match at COPY_MIN_IDENTITY over COPY_MIN_COVERAGE of
+        whose sequences match at ``min_identity`` over COPY_MIN_COVERAGE of
         both are one element: each gets the summed counts, the number of
         copies, the group name and evidence_level "element".
         """
@@ -603,7 +603,7 @@ class ISFormatter:
             f = line.split("\t")
             matches, block = int(f[9]), int(f[10])
             covered = min((int(f[3]) - int(f[2])) / int(f[1]), (int(f[8]) - int(f[7])) / int(f[6]))
-            if matches / block >= COPY_MIN_IDENTITY and covered >= COPY_MIN_COVERAGE:
+            if matches / block >= min_identity and covered >= COPY_MIN_COVERAGE:
                 a, b = root(f[0]), root(f[5])
                 group[max(a, b)] = min(a, b)
 
@@ -701,6 +701,7 @@ class ISFormatter:
         self,
         circle_dir: Path,
         sample_id: str,
+        platform: str = "OXFORD_NANOPORE",
     ) -> Optional[Path]:
         """Run IS formatting for one sample's circle detection output.
 
@@ -844,7 +845,7 @@ class ISFormatter:
             record["flank_status"] = "ambiguous" if ambiguous else "ok" if upstream and downstream else "missing"
             records.append(record)
 
-        self._group_copies(records, assembly_dir)
+        self._group_copies(records, assembly_dir, COPY_MIN_IDENTITY.get(platform, COPY_MIN_IDENTITY["OXFORD_NANOPORE"]))
 
         # 6. Write outputs
         if not records:
@@ -876,6 +877,7 @@ class ISFormatter:
         self,
         circle_results: dict[str, Optional[Path]],
         parallel: int = 1,
+        platforms: Optional[dict[str, str]] = None,
     ) -> dict[str, Optional[Path]]:
         """Run IS formatting for all samples.
 
@@ -911,6 +913,7 @@ class ISFormatter:
                     out = self.run_sample(
                         circle_dir=circle_dir,
                         sample_id=sample_id,
+                        platform=(platforms or {}).get(sample_id, "OXFORD_NANOPORE"),
                     )
                     results[sample_id] = out
                 except Exception as exc:
@@ -936,6 +939,7 @@ class ISFormatter:
                         min_entropy=self.min_entropy,
                         require_th_reads=self.require_th_reads,
                         threads=self.threads,
+                        platform=(platforms or {}).get(sample_id, "OXFORD_NANOPORE"),
                     )
                     futures[fut] = sample_id
 
@@ -973,6 +977,7 @@ def _run_formatter_worker(
     min_entropy: float,
     require_th_reads: bool,
     threads: int,
+    platform: str,
 ) -> Optional[Path]:
     """Standalone worker function for parallel IS formatting."""
     formatter = ISFormatter(
@@ -987,6 +992,7 @@ def _run_formatter_worker(
     return formatter.run_sample(
         circle_dir=circle_dir,
         sample_id=sample_id,
+        platform=platform,
     )
 
 
