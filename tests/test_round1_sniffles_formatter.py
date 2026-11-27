@@ -255,6 +255,20 @@ class TestFormatterRecords(TemporaryTest):
         self.assertEqual((record['flanking_upstream']['sequence'], record['flanking_downstream']['sequence']),
                          (up, down))
 
+    def test_reads_from_another_copy_do_not_polish_the_flanks(self):
+        """Reads of the same element at another locus must not change this locus's flanks."""
+        if not shutil.which('racon'):
+            self.skipTest('racon is required')
+        consensus = rand_seq(600)
+        up, down = rand_seq(80), rand_seq(80)
+        molecule = rand_seq(700) + up + consensus + down + rand_seq(700)
+        reads = [('here0', molecule, 'locusG', 60)]
+        reads += [(f'here{i}', molecule[20 * i:len(molecule) - 20 * i], 'locusG', 60) for i in (1, 2)]
+        reads += [(f'elsewhere{i}', rand_seq(650) + consensus + rand_seq(650), 'locusG', 0) for i in range(8)]
+        record = self.format_sample([('locusG', 1000, consensus)], reads)['locusG']
+        self.assertEqual((record['flanking_upstream']['sequence'], record['flanking_downstream']['sequence']),
+                         (up, down))
+
     def test_insertion_without_tail_head_reads_gets_a_record(self):
         """Every insertion gets a record; tail-head evidence is a field, not a filter."""
         consensus = rand_seq(400)

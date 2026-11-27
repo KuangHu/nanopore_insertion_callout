@@ -28,6 +28,7 @@ from .config import (
     DEFAULT_MIN_ENTROPY,
     DEFAULT_MIN_READS_FOR_ASSEMBLY,
     MAX_FALLBACK_READS,
+    MAX_OVERHANG,
     POLISH_PAD,
     POLISH_ROUNDS,
 )
@@ -498,7 +499,16 @@ class ISFormatter:
                 )
                 if mapped.returncode != 0:
                     break
-                overlaps.write_bytes(mapped.stdout)
+                # Keep a read only where it follows the backbone to the end of one of the two:
+                # a read from another copy of the element leaves the backbone inside the flank.
+                kept = []
+                for line in mapped.stdout.decode().splitlines():
+                    f = line.split("\t")
+                    q_len, q_start, q_end, t_len, t_start, t_end = (int(f[i]) for i in (1, 2, 3, 6, 7, 8))
+                    q_left, q_right = (q_start, q_len - q_end) if f[4] == "+" else (q_len - q_end, q_start)
+                    if min(q_left, t_start) <= MAX_OVERHANG and min(q_right, t_len - t_end) <= MAX_OVERHANG:
+                        kept.append(line)
+                overlaps.write_text("\n".join(kept) + "\n")
                 result = subprocess.run(
                     ["racon", "-u", "-t", str(self.threads), str(reads_fq), str(overlaps), str(target_fa)],
                     capture_output=True, timeout=self.assembly_timeout,
