@@ -65,7 +65,12 @@ if [[ -z "$BATCH_NUM" ]]; then
     exit 1
 fi
 
-batch_name=$(printf 'batch_%03d' "$BATCH_NUM")
+# printf reads a leading zero as octal (010 is 8): take the number as decimal, digits only
+if [[ ! "$BATCH_NUM" =~ ^[0-9]+$ ]]; then
+    echo "BATCH_NUM must be a number: $BATCH_NUM" >&2
+    exit 1
+fi
+batch_name=$(printf 'batch_%03d' "$((10#$BATCH_NUM))")
 
 # ── Paths and site settings ────────────────────────────────────────
 # Code, data, log, environment and scheduler locations come from config/site.env (falling back to
