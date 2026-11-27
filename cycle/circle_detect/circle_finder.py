@@ -28,6 +28,7 @@ from .config import (
     DEFAULT_MAX_TARGET_DUPLICATION,
     DEFAULT_MIN_DUPLICATION_READS,
     DEFAULT_CIRCLE_OUTPUT_DIR,
+    DEFAULT_JUNCTION_WINDOW,
     DEFAULT_MIN_CONSENSUS_ENTROPY,
     DEFAULT_MIN_CONSENSUS_LENGTH,
     DEFAULT_MIN_JUNCTION_OVERLAP,
@@ -403,9 +404,12 @@ class CircleFinder:
                 if votes < DEFAULT_MIN_DUPLICATION_READS or votes * 2 <= len(gaps):
                     duplication = ""
                 elif duplication and trim_duplication:
-                    gap_start = Counter(start for start, length in gaps if length == duplication).most_common(1)[0][0]
-                    shift = gap_start + duplication - len(entry.consensus)
-                    consensus = entry.consensus[shift:gap_start]
+                    starts = Counter(start for start, length in gaps if length == duplication and start is not None)
+                    if starts:
+                        gap_start = starts.most_common(1)[0][0]
+                        n = len(entry.consensus)
+                        shift = gap_start + duplication - n
+                        consensus = (entry.consensus * 3)[gap_start + duplication:gap_start + n]
             summary_by_uuid[uuid] = {
                 "is_uuid": uuid,
                 "chrom": entry.chrom,
@@ -429,15 +433,21 @@ class CircleFinder:
     def _junction_gap(cigar, ref_start, junction_pos, min_overlap):
         """Return the deletion a read has at the bait junction, or None if it is not junction evidence.
 
-        ``(junction_pos, 0)`` means aligned bases run straight across the junction.
-        ``(start, length)`` means one deletion of at most DEFAULT_MAX_TARGET_DUPLICATION bases
-        contains or touches the junction. Both sides need ``min_overlap`` aligned bases; indels
-        away from the junction may occur in noisy reads but add nothing to either anchor.
+        The result is ``(start, length)``. ``length`` is the number of deleted bases within
+        DEFAULT_JUNCTION_WINDOW of the junction, at most DEFAULT_MAX_TARGET_DUPLICATION;
+        ``start`` is where they begin when they form one deletion, else None. A read aligned
+        straight across gives ``(junction_pos, 0)``. Both sides need ``min_overlap`` aligned
+        bases; indels away from the junction may occur in noisy reads but add nothing to
+        either anchor. The aligner may place the deletion a base or two off the junction where
+        neighbouring bases are equal, which is why a window is used.
         """
+        low = junction_pos - DEFAULT_JUNCTION_WINDOW
+        high = junction_pos + DEFAULT_JUNCTION_WINDOW
         ref_pos = ref_start
         block_start = None
         left_bases = right_bases = 0
-        gap = None
+        bridged = False
+        deletions = []
         for op, length in cigar or []:
             if op in (0, 7, 8):  # consumes both reference and query
                 if block_start is None:
@@ -445,19 +455,22 @@ class CircleFinder:
                 end = ref_pos + length
                 left_bases += max(0, min(end, junction_pos) - ref_pos)
                 right_bases += max(0, end - max(ref_pos, junction_pos))
-                if block_start < junction_pos < end:
-                    gap = (junction_pos, 0)
+                bridged |= block_start < junction_pos < end
                 ref_pos = end
             else:
                 if op in (2, 3):  # deletion or reference skip
-                    if (op == 2 and length <= DEFAULT_MAX_TARGET_DUPLICATION
-                            and ref_pos <= junction_pos <= ref_pos + length):
-                        gap = (ref_pos, length)
+                    if ref_pos <= high and ref_pos + length >= low:
+                        if op == 3:
+                            return None
+                        deletions.append((ref_pos, length))
                     ref_pos += length
                 block_start = None
-        if left_bases < min_overlap or right_bases < min_overlap:
+        deleted = sum(length for _, length in deletions)
+        if left_bases < min_overlap or right_bases < min_overlap or deleted > DEFAULT_MAX_TARGET_DUPLICATION:
             return None
-        return gap
+        if deletions:
+            return (deletions[0][0] if len(deletions) == 1 else None, deleted)
+        return (junction_pos, 0) if bridged else None
 
     # ------------------------------------------------------------------
     # Public API

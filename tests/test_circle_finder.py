@@ -124,6 +124,22 @@ class TestFindJunctionReads(unittest.TestCase):
         self.assertEqual(summary['is1']['consensus'], self.entry.consensus[:990])
         self.assertEqual((summary['is1']['start'], summary['is1']['end']), (5000, 5990))
 
+    def test_junction_deletion_placed_one_base_off_the_junction(self):
+        """Where neighbouring bases are equal the aligner may start the deletion a base late."""
+        self._duplication_entry()
+        _, summary = self._run(self._duplication_reads([(0, 201), (2, 10), (0, 199)], 3), trim_duplication=True)
+        self.assertEqual(summary['is1']['target_duplication'], 10)
+        self.assertEqual(summary['is1']['consensus'], self.entry.consensus[11:] + self.entry.consensus[:1])
+        self.assertEqual(summary['is1']['start'], 5011)
+
+    def test_split_junction_deletion_is_counted_but_not_cut(self):
+        """Deleted bases split over two gaps give the duplication length, but no place to cut."""
+        self._duplication_entry()
+        _, summary = self._run(self._duplication_reads([(0, 198), (2, 4), (0, 3), (2, 6), (0, 199)], 3),
+                               trim_duplication=True)
+        self.assertEqual(summary['is1']['target_duplication'], 10)
+        self.assertEqual(summary['is1']['consensus'], self.entry.consensus)
+
     def test_duplication_is_recorded_but_not_cut_without_trimming(self):
         """Without trimming (nanopore) the duplication length is reported and the call is left as it is."""
         self._duplication_entry()
