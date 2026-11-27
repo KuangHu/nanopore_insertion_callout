@@ -38,6 +38,20 @@ from .config import (
 
 logger = logging.getLogger(__name__)
 
+READ_COLUMNS = [
+    "read_id", "sample_id", "is_uuid", "junction_type", "chrom",
+    "start", "end", "family", "subfamily", "read_length",
+    "alignment_start", "alignment_end", "junction_pos",
+    "overlap_left", "overlap_right", "mapping_quality",
+    "strand", "junction_read_pos", "junction_seq", "junction_deletion",
+]
+SUMMARY_COLUMNS = [
+    "is_uuid", "chrom", "start", "end", "family", "subfamily",
+    "consensus_length", "consensus", "target_duplication", "n_tail_head_reads",
+    "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
+    "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids",
+]
+
 
 @dataclass
 class ISEntry:
@@ -155,22 +169,25 @@ class CircleFinder:
             ref_name to a list of ``{type, position, uuid}`` dicts.
         """
         output_path = Path(output_path)
-        if output_path.exists():
-            logger.info(f"Bait FASTA exists: {output_path}")
-            return output_path, self._parse_bait_headers(output_path)
-
         junction_map: dict[str, list[dict]] = {}
+        lines = []
+        for entry in entries:
+            n = len(entry.consensus)
+            th_name = f"{entry.uuid}__th__j{n}"
+            lines.append(f">{th_name}\n{entry.consensus}{entry.consensus}\n")
+            junction_map[th_name] = [
+                {"type": "tail_head", "position": n, "uuid": entry.uuid},
+            ]
+        text = "".join(lines)
 
-        with open(output_path, "w") as fh:
-            for entry in entries:
-                n = len(entry.consensus)
+        if output_path.exists() and output_path.read_text() == text:
+            logger.info(f"Bait FASTA exists: {output_path}")
+            return output_path, junction_map
 
-                th_name = f"{entry.uuid}__th__j{n}"
-                fh.write(f">{th_name}\n")
-                fh.write(f"{entry.consensus}{entry.consensus}\n")
-                junction_map[th_name] = [
-                    {"type": "tail_head", "position": n, "uuid": entry.uuid},
-                ]
+        # New or changed candidates: reads mapped to an older bait no longer apply.
+        for old_bam in output_path.parent.glob("*.circle.sorted.bam*"):
+            old_bam.unlink()
+        output_path.write_text(text)
 
         logger.info(
             f"Wrote bait FASTA with {len(junction_map)} tail-head "
@@ -547,10 +564,11 @@ class CircleFinder:
         # 1. Parse tldr table
         entries = self._parse_tldr_table(tldr_table)
         if not entries:
-            logger.warning(
-                f"No valid IS entries for {sample_id}, skipping circle detection"
-            )
-            return None
+            # A sample without insertions is finished, not failed: leave empty tables.
+            logger.warning(f"No valid IS entries for {sample_id}, nothing to detect")
+            _write_tsv(sample_dir / f"{sample_id}_circle_reads.tsv", [], READ_COLUMNS)
+            _write_tsv(sample_dir / f"{sample_id}_circle_summary.tsv", [], SUMMARY_COLUMNS)
+            return sample_dir
 
         entries_by_uuid = {e.uuid: e for e in entries}
 
@@ -575,22 +593,11 @@ class CircleFinder:
 
         # 4. Write output TSVs
         reads_tsv = sample_dir / f"{sample_id}_circle_reads.tsv"
-        _write_tsv(reads_tsv, junction_reads, [
-            "read_id", "sample_id", "is_uuid", "junction_type", "chrom",
-            "start", "end", "family", "subfamily", "read_length",
-            "alignment_start", "alignment_end", "junction_pos",
-            "overlap_left", "overlap_right", "mapping_quality",
-            "strand", "junction_read_pos", "junction_seq", "junction_deletion",
-        ])
+        _write_tsv(reads_tsv, junction_reads, READ_COLUMNS)
 
         summary_tsv = sample_dir / f"{sample_id}_circle_summary.tsv"
         summary_rows = list(summary_by_uuid.values())
-        _write_tsv(summary_tsv, summary_rows, [
-            "is_uuid", "chrom", "start", "end", "family", "subfamily",
-            "consensus_length", "consensus", "target_duplication", "n_tail_head_reads",
-            "n_genome_head_reads", "n_tail_genome_reads", "n_total_mapped",
-            "example_th_read", "example_th_read_id", "junction_seq", "tail_head_read_ids",
-        ])
+        _write_tsv(summary_tsv, summary_rows, SUMMARY_COLUMNS)
 
         total_junctions = sum(
             s["n_tail_head_reads"] + s["n_genome_head_reads"]

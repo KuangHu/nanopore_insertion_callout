@@ -69,6 +69,11 @@ def main() -> None:
 
     succeeded = sum(1 for v in results.values() if v is not None)
     logger.info(f"Done: {succeeded}/{len(results)} samples annotated successfully")
+    failed = sorted(sid for sid, out in results.items() if out is None)
+    if failed:
+        logger.error(f"No result for {len(failed)} samples: {', '.join(failed)}")
+    if results and len(failed) == len(results):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

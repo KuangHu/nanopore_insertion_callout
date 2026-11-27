@@ -102,10 +102,13 @@ class SnifflesRunner:
                 logger.info(f"  {sample_id} - reprocessing empty VCF")
 
         if not skip_existing:
+            # Sniffles writes to a pending file, renamed only after a clean exit, so a VCF
+            # under the final name always comes from a finished run.
+            pending_vcf = sample_dir / f".{sample_id}.pending.vcf"
             cmd = [
                 "sniffles",
                 "--input", str(bam),
-                "--vcf", str(vcf_path),
+                "--vcf", str(pending_vcf),
                 "--reference", str(ref_fasta),
                 "--threads", "1",
                 "--minsvlen", str(min_size),
@@ -124,10 +127,13 @@ class SnifflesRunner:
                 if ret.returncode != 0:
                     err_msg = ret.stderr.strip() or ret.stdout.strip() or "(no output)"
                     logger.warning(f"Sniffles2 failed for {sample_id} (exit={ret.returncode}): {err_msg[:300]}")
+                    pending_vcf.unlink(missing_ok=True)
                     return None
             except subprocess.TimeoutExpired:
                 logger.warning(f"Sniffles2 timed out for {sample_id}")
+                pending_vcf.unlink(missing_ok=True)
                 return None
+            pending_vcf.replace(vcf_path)
 
         # Parse VCF and collect insertions
         insertions = []

@@ -55,6 +55,8 @@ print(f'Total sequences: {n}')
 "
 
 echo "=== Step 2: Parallel Prodigal (48 chunks) ==="
+# Chunks of an earlier run must not be merged into this one.
+rm -rf "$OUT/prodigal_chunks"
 mkdir -p $OUT/prodigal_chunks
 conda run -p "$CYCLE_ENV_PREFIX" python -c "
 fasta = '$OUT/all_consensus.fna'
@@ -77,12 +79,16 @@ for i in range(48):
         for h, s in chunk: f.write(h + s)
 "
 
+pids=""
 for i in $(seq 0 47); do
     CHUNK=$OUT/prodigal_chunks/chunk_${i}.fna
     [ ! -f "$CHUNK" ] && continue
     conda run -p "$CYCLE_ENV_PREFIX" prodigal -i $CHUNK -a $OUT/prodigal_chunks/chunk_${i}.faa -o /dev/null -p meta -q &
+    pids="$pids $!"
 done
-wait
+for pid in $pids; do
+    wait $pid || { echo "A Prodigal worker failed" >&2; exit 1; }
+done
 cat $OUT/prodigal_chunks/chunk_*.faa > $OUT/all_proteins.faa
 echo "Proteins: $(grep -c '^>' $OUT/all_proteins.faa)"
 

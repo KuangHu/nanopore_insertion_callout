@@ -337,8 +337,10 @@ class ORFAnnotator:
         out_path = json_path.with_name(
             json_path.name.replace("_is_records.json", "_is_records_annotated.json")
         )
-        with open(out_path, "w") as fh:
+        pending = out_path.with_name(f".{out_path.name}.pending")
+        with open(pending, "w") as fh:
             json.dump(records, fh, indent=2)
+        pending.replace(out_path)
         logger.info(f"Wrote {len(records)} annotated records to {out_path}")
         return out_path
 

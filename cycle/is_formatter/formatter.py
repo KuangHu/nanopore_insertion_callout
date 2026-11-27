@@ -615,12 +615,13 @@ class ISFormatter:
                 return None
             summary_tsv = summary_files[0]
 
+        # A sample without elements or records is finished, not failed.
+        sample_out = self.output_dir / sample_id
+        sample_out.mkdir(parents=True, exist_ok=True)
         is_entries = self._load_circle_summary(summary_tsv)
         if not is_entries:
-            logger.warning(
-                f"No IS elements with reads for {sample_id}, skipping"
-            )
-            return None
+            logger.warning(f"No IS elements for {sample_id}, nothing to format")
+            return sample_out
 
         # 2. Discover BAMs
         bam_path = circle_dir / f"{sample_id}.circle.sorted.bam"
@@ -638,8 +639,6 @@ class ISFormatter:
         )
 
         # 3. Set up output directory
-        sample_out = self.output_dir / sample_id
-        sample_out.mkdir(parents=True, exist_ok=True)
         assembly_dir = sample_out / "assembly"
         assembly_dir.mkdir(parents=True, exist_ok=True)
 
@@ -725,7 +724,7 @@ class ISFormatter:
         # 6. Write outputs
         if not records:
             logger.warning(f"No IS records produced for {sample_id}")
-            return None
+            return sample_out
 
         json_path = sample_out / f"{sample_id}_is_records.json"
         with open(json_path, "w") as fh:

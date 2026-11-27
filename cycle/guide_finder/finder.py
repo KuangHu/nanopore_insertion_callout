@@ -89,8 +89,11 @@ class GuideFinder:
                 "_is_records_annotated.json", "_is_records_guide.json"
             )
         )
-        with open(out_path, "w") as fh:
+        # Written under another name first: a file with the final name is always whole.
+        pending = out_path.with_name(f".{out_path.name}.pending")
+        with open(pending, "w") as fh:
             json.dump(records, fh, indent=2)
+        pending.replace(out_path)
 
         sample_id = json_path.stem.replace("_is_records_annotated", "")
         logger.info(

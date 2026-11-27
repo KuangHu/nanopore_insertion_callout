@@ -330,6 +330,26 @@ def discover_sample_circle_dirs(
     return results
 
 
+def check_stage(stage: str, results: dict, wanted: list[str], out_dir: Path) -> None:
+    """List the samples a stage gave no result for; stop when it gave none at all.
+
+    The list is written to failed_samples.tsv in the stage's output directory
+    and replaced on every run. Samples that did get through carry on, so one
+    bad sample does not hold back the rest of its batch.
+    """
+    failed = [sid for sid in wanted if not results.get(sid)]
+    status_path = out_dir / "failed_samples.tsv"
+    if failed:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        status_path.write_text("sample_id\tstage\n" + "".join(f"{sid}\t{stage}\n" for sid in failed))
+        logger.error(f"{stage}: no result for {len(failed)}/{len(wanted)} samples, listed in {status_path}")
+    else:
+        status_path.unlink(missing_ok=True)
+    if wanted and len(failed) == len(wanted):
+        logger.error(f"{stage}: no sample got through")
+        sys.exit(1)
+
+
 def main():
     args = parse_args()
 
@@ -478,6 +498,7 @@ def main():
 
         if failed:
             logger.error(f"Alignment incomplete: {failed} samples failed or lack inputs")
+        if failed == len(metadata):
             sys.exit(1)
 
     # ── Stage 5: IS reference ────────────────────────────────────────
@@ -555,6 +576,7 @@ def main():
 
         ok = sum(1 for v in sniffles_results.values() if v)
         logger.info(f"Sniffles2: {ok}/{len(sniffles_results)} samples produced results")
+        check_stage("sniffles", sniffles_results, list(metadata["srr_accession"]), Path(args.sniffles_dir))
 
     # ── Stage 7: Circle detection ─────────────────────────────────────
     if "circle" in steps:
@@ -570,8 +592,8 @@ def main():
         elif any(sniffles_results.values()):
             insertion_results = sniffles_results
             logger.info("Using Sniffles2 results for circle detection")
-        else:
-            # Try to discover from disk
+        elif not steps & {"tldr", "sniffles"}:
+            # Neither caller ran in this session: use the tables on disk
             insertion_results = discover_sample_tables(
                 Path(args.tldr_dir), metadata,
             )
@@ -606,6 +628,7 @@ def main():
         logger.info(
             f"Circle detection: {ok}/{len(circle_results)} samples processed"
         )
+        check_stage("circle", circle_results, [s for s, t in insertion_results.items() if t], Path(args.circle_dir))
 
     # ── Stage 8: IS formatting ────────────────────────────────────────
     if "format" in steps:
@@ -613,8 +636,8 @@ def main():
         logger.info("STAGE 8: format — extracting IS elements + flanking regions")
         logger.info("=" * 60)
 
-        # Discover circle results if not available from current session
-        if not any(circle_results.values()):
+        # Use the circle output on disk only when the circle stage did not run in this session
+        if "circle" not in steps:
             circle_results = discover_sample_circle_dirs(
                 Path(args.circle_dir), metadata,
             )
@@ -640,6 +663,7 @@ def main():
         logger.info(
             f"IS formatting: {ok}/{len(format_results)} samples processed"
         )
+        check_stage("format", format_results, [s for s, d in circle_results.items() if d], Path(args.formatter_dir))
 
     logger.info("Pipeline complete.")
 

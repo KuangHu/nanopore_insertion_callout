@@ -111,6 +111,7 @@ echo ""
 echo "Splitting metadata into $NODES chunks..."
 
 python3 -c "
+import json
 import pandas as pd
 import os
 
@@ -119,13 +120,17 @@ n_nodes = $NODES
 fmt_dir = '$FMT_DIR'
 chunk_dir = '$CHUNK_DIR'
 
-# Detect completed samples (have guide.json)
+# Detect completed samples (have a guide.json that parses)
 completed = set()
 if os.path.isdir(fmt_dir):
     for d in os.listdir(fmt_dir):
         guide = os.path.join(fmt_dir, d, f'{d}_is_records_guide.json')
         if os.path.exists(guide):
-            completed.add(d)
+            try:
+                json.load(open(guide))
+                completed.add(d)
+            except ValueError:
+                print(f'Unreadable guide JSON, sample will be recomputed: {guide}')
 
 print(f'Total samples: {len(metadata)}')
 print(f'Already completed (have guide.json): {len(completed)}')
