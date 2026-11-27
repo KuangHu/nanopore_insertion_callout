@@ -128,29 +128,26 @@ class TestSnifflesTable(TemporaryTest):
                     'reference flank: the whole assembly unitig was stored as the insertion')
             self.assertLessEqual(len(consensus), 1000, 'Consensus is longer than max_size')
 
-    def test_c2_pure_insertion_reference_locus_is_not_pos_plus_svlen(self):
-        """A pure insertion is exported at its reference insertion point, not POS..POS+SVLEN."""
+    def test_c2_pure_insertion_is_a_point_with_its_length_in_its_own_column(self):
+        """A pure insertion is exported as Start = End = POS, with the inserted length in a Length column."""
         insertion = rand_seq(500)
         vcf = vcf_text(1200, [(1000, 'A', 'A' + insertion, 'PRECISE;SVTYPE=INS;SVLEN=500;SUPPORT=5')])
         rows = read_table(self.run_sniffles(self.root / 'S.sorted.bam', vcf))
         self.assertEqual(len(rows), 1, 'the resolved 500 bp insertion should give one table row')
-        # Assumed table contract, as read today by CircleFinder: Start/End columns are the
-        # reference locus and go unchanged into the formatter record.
+        self.assertEqual(
+            (int(rows[0]['Start']), int(rows[0]['End'])), (1000, 1000),
+            'POS+SVLEN was exported as a reference coordinate')
+        self.assertEqual(int(rows[0].get('Length', -1)), 500, 'inserted length is not in a Length column')
+        # Start/End go unchanged into the formatter record, as CircleFinder reads them today.
         formatter = object.__new__(ISFormatter)
         record = formatter._format_record(
             {'is_uuid': rows[0]['UUID'], 'chrom': rows[0]['Chrom'],
              'start': int(rows[0]['Start']), 'end': int(rows[0]['End']),
              'n_tail_head_reads': 1, 'n_genome_head_reads': 0, 'n_tail_genome_reads': 0},
             insertion, '', '', 'S', 'longest_read')
-        site = record['insertion_site']
-        # Holds under any coordinate convention: chr1 is 1200 bp long.
-        self.assertLessEqual(
-            site['pos_3p'], 1200,
-            f"insertion_site.pos_3p={site['pos_3p']} lies beyond the 1200 bp contig: POS+SVLEN was "
-            'exported as a reference coordinate')
-        # Assumed convention: the locus is a point (end == start) or one anchor base (end == start + 1).
-        self.assertLessEqual(site['pos_3p'] - site['pos_5p'], 1)
-        self.assertLessEqual(record['is_element']['end'] - record['is_element']['start'], 1)
+        self.assertEqual((record['insertion_site']['pos_5p'], record['insertion_site']['pos_3p']), (1000, 1000))
+        self.assertEqual((record['is_element']['start'], record['is_element']['end']), (1000, 1000))
+        self.assertEqual(record['is_element']['length'], 500)
 
     def test_c16_failed_sniffles_vcf_not_reused_on_resume(self):
         """A VCF left by a failed Sniffles run must not become an insertion table on the next run."""
@@ -205,8 +202,8 @@ class TestFormatterRecords(TemporaryTest):
             return {}
         return {rec['is_id']: rec for rec in json.loads((out / 'S_is_records.json').read_text())}
 
-    def test_c3_mapq0_read_from_other_locus_gives_no_flanks(self):
-        """A locus must not get flanks from a MAPQ 0 read that belongs to another copy of the element."""
+    def test_c3_mapq0_read_from_other_locus_gives_flagged_record_without_flanks(self):
+        """A locus whose only read may belong to another copy keeps its record, with empty flanks and a flag."""
         consensus = rand_seq(400)
         up_a, down_a = rand_seq(80), rand_seq(80)
         # The same element sits at chr1:1000 (locus A) and chr1:5000 (locus B). The read comes from A;
@@ -215,14 +212,14 @@ class TestFormatterRecords(TemporaryTest):
         records = self.format_sample(
             [('locusA', 1000, consensus), ('locusB', 5000, consensus)],
             [('read_from_locusA', up_a + consensus + down_a, 'locusB', 0)])
-        record = records.get('locusB')
-        if record is None:
-            return
-        self.assertFalse(
-            up_a in record['flanking_upstream']['sequence']
-            or down_a in record['flanking_downstream']['sequence'],
-            f"locusB record (assembly_method={record['assembly_method']}) carries the flanks of "
-            'locus A, taken from the MAPQ 0 read read_from_locusA')
+        self.assertIn('locusB', records, 'the record of the ambiguous locus was dropped')
+        record = records['locusB']
+        self.assertEqual(
+            (record['flanking_upstream']['sequence'], record['flanking_downstream']['sequence']), ('', ''),
+            f"locusB record (assembly_method={record['assembly_method']}) carries flanks taken from "
+            'the MAPQ 0 read read_from_locusA')
+        # Field name chosen here; the fix must use the same one.
+        self.assertEqual(record.get('flank_status'), 'ambiguous')
 
     def test_c4_reported_strand_matches_sequence_orientation(self):
         """A record must not say strand + when its sequence is the reverse complement of the consensus."""
