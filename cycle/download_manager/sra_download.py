@@ -1,5 +1,6 @@
 """Download SRA runs using kingfisher (multi-source with automatic fallback)."""
 
+import gzip
 import logging
 import subprocess
 import shutil
@@ -78,6 +79,17 @@ class SRADownloader:
 
         if matches:
             logger.info(f"  -> {[f.name for f in matches]}")
+            # kingfisher can report success for a file cut short; such a file is not a download
+            for path in matches:
+                if path.suffix == ".gz":
+                    try:
+                        with gzip.open(path, "rb") as handle:
+                            while handle.read(1 << 24):
+                                pass
+                    except (OSError, EOFError) as exc:
+                        # The file stays for inspection; download_status.tsv marks the run failed
+                        logger.error(f"Truncated or corrupt download for {srr}: {path.name}: {exc}")
+                        return None
             return matches[0]
 
         logger.warning(f"No output files found for {srr}")

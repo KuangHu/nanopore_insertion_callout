@@ -451,11 +451,22 @@ def main():
         if not ref_map:
             ref_map = discover_existing_refs(Path(args.ref_dir))
 
+        # A run whose download failed (for example a truncated file) is not aligned even when a file exists
+        failed_downloads = set()
+        status_path = Path(args.fastq_dir) / "download_status.tsv"
+        if status_path.exists():
+            status = pd.read_csv(status_path, sep="\t", dtype=str)
+            failed_downloads = set(status.loc[status["download_status"] != "ok", "srr_accession"])
+
         sample_map = []
         skipped = 0
         for _, row in metadata.iterrows():
             sid = row["srr_accession"]
             org = row.get("organism", "")
+            if sid in failed_downloads:
+                logger.warning(f"Download of {sid} failed, not aligning it")
+                skipped += 1
+                continue
 
             ref_info = ref_map.get(org)
             if not ref_info:
