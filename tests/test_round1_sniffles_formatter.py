@@ -221,6 +221,20 @@ class TestFormatterRecords(TemporaryTest):
         # Field name chosen here; the fix must use the same one.
         self.assertEqual(record.get('flank_status'), 'ambiguous')
 
+    def test_fallback_uses_a_shorter_read_when_the_longest_lacks_the_element(self):
+        """With no assembly, the record comes from the longest read that holds the whole element."""
+        consensus = rand_seq(400)
+        up, down = rand_seq(80), rand_seq(80)
+        records = self.format_sample(
+            [('locusD', 1000, consensus)],
+            [('long_read_without_element', rand_seq(3000), 'locusD', 60),
+             ('spanning_read', up + consensus + down, 'locusD', 60)])
+        record = records['locusD']
+        self.assertEqual(record['assembly_method'], 'longest_read')
+        self.assertEqual(record['is_element']['sequence'], consensus)
+        self.assertEqual((record['flanking_upstream']['sequence'], record['flanking_downstream']['sequence']),
+                         (up, down))
+
     def test_c4_reported_strand_matches_sequence_orientation(self):
         """A record must not say strand + when its sequence is the reverse complement of the consensus."""
         consensus = rand_seq(400)

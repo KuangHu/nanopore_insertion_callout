@@ -27,6 +27,7 @@ from .config import (
     DEFAULT_FORMATTER_OUTPUT_DIR,
     DEFAULT_MIN_ENTROPY,
     DEFAULT_MIN_READS_FOR_ASSEMBLY,
+    MAX_FALLBACK_READS,
 )
 
 logger = logging.getLogger(__name__)
@@ -435,29 +436,30 @@ class ISFormatter:
         work_dir: Path,
         flank_size: int,
     ) -> Optional[tuple[str, str, str]]:
-        """Extract IS + flanks from the longest read via alignment.
+        """Extract IS + flanks from the longest read that holds the whole element.
+
+        Reads are tried longest first, because the longest read may end inside
+        the element. A read with both flanks complete is taken at once;
+        otherwise the first read in which the element was found is used.
 
         Returns (is_sequence_from_read, upstream, downstream) or None.
         """
-        if not reads:
-            return None
-
-        # Find longest read
-        longest_idx = max(range(len(reads)), key=lambda i: len(reads[i][1]))
-        _, longest_seq, _ = reads[longest_idx]
-
-        # Map consensus to the longest read
-        loc = self._locate_is_in_contig(longest_seq, consensus_seq, work_dir)
-        if loc is None:
-            return None
-
-        is_start, is_end, strand = loc
-        is_seq = longest_seq[is_start:is_end]
-        upstream, downstream = self._extract_flanks_from_contig(
-            longest_seq, is_start, is_end, flank_size,
-        )
-
-        return is_seq, upstream, downstream
+        first_found = None
+        by_length = sorted(reads, key=lambda read: len(read[1]), reverse=True)
+        for _, read_seq, _ in by_length[:MAX_FALLBACK_READS]:
+            loc = self._locate_is_in_contig(read_seq, consensus_seq, work_dir)
+            if loc is None:
+                continue
+            is_start, is_end, strand = loc
+            upstream, downstream = self._extract_flanks_from_contig(
+                read_seq, is_start, is_end, flank_size,
+            )
+            found = (read_seq[is_start:is_end], upstream, downstream)
+            if len(upstream) == flank_size and len(downstream) == flank_size:
+                return found
+            if first_found is None:
+                first_found = found
+        return first_found
 
     def _format_record(
         self,
