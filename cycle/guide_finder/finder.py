@@ -181,6 +181,11 @@ class GuideFinder:
         if not is_seq:
             return []
 
+        # Side of the element each flank is on, in the element's own direction when known
+        orientation = rec.get("orientation", "")
+        side = {"upstream": {"+": "5_prime_side", "-": "3_prime_side"}.get(orientation, ""),
+                "downstream": {"+": "3_prime_side", "-": "5_prime_side"}.get(orientation, "")}
+
         flanks = []
         up = (rec.get("flanking_upstream") or {}).get("sequence", "")
         if up:
@@ -211,8 +216,10 @@ class GuideFinder:
                     hits.append(
                         {
                             "flanking_source": flank_source,
+                            "flanking_element_side": side[flank_source],
                             "noncoding_region_index": nc_idx,
                             "noncoding_region_type": nc["type"],
+                            "noncoding_element_end": nc.get("element_end", ""),
                             "noncoding_start": nc_start,
                             "noncoding_end": nc_end,
                             "pos_in_flanking": aln["pos1"],

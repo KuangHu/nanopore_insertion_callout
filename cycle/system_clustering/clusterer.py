@@ -25,6 +25,7 @@ from .config import (
 from .variant_analyzer import VariantAnalyzer
 
 log = logging.getLogger(__name__)
+_COMPLEMENT = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 
 
 class SystemClusterer:
@@ -191,6 +192,10 @@ class SystemClusterer:
 
                     flank_up = rec.get("flanking_upstream", {}).get("sequence", "")
                     flank_down = rec.get("flanking_downstream", {}).get("sequence", "")
+                    # Compare target sites in the element's own direction: for a minus element
+                    # the 5' side is the reverse complement of the downstream flank.
+                    if rec.get("orientation") == "-":
+                        flank_up, flank_down = flank_down.translate(_COMPLEMENT)[::-1], flank_up.translate(_COMPLEMENT)[::-1]
 
                     # Best guide hit
                     guide_hits = rec.get("guide_hits", [])

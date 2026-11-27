@@ -14,7 +14,8 @@ every record:
 
 Record sequences are on the reference strand, so a minus orientation means
 the element's 5' end is at the record's end and ``flanking_upstream`` lies on
-its 3' side. ISfinder entries, and the transposase ORFs of most families, run
+its 3' side. Non-coding regions get ``element_end`` in the element's own
+direction (the ORF annotator's ``type`` follows the record). ISfinder entries, and the transposase ORFs of most families, run
 5' to 3'; when the two disagree the ISfinder strand is used.
 
 ``evidence`` stays "tail_head_reads" when the record has them; otherwise it
@@ -139,6 +140,12 @@ def annotate_sample(json_path: Path, db: Path, hmm: Path, threads: int = 1) -> P
         record["orientation_orf"] = by_orf
         record["orientation_isfinder"] = by_hit
         record["orientation_status"] = status
+        # The ORF annotator names non-coding regions by the record's own direction; give the
+        # element's ends as well. A minus element starts at the record's end.
+        swap = {"5_prime": "3_prime", "3_prime": "5_prime"}
+        for region in (record.get("orf_annotation") or {}).get("noncoding_regions") or []:
+            kind = region.get("type", "")
+            region["element_end"] = "" if not record["orientation"] else swap.get(kind, kind) if record["orientation"] == "-" else kind
         if record.get("evidence") != "tail_head_reads":
             record["evidence"] = "is_reference_hit" if hit else "transposase_domain" if names else "none"
 
