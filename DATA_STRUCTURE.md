@@ -79,6 +79,26 @@ Each sample's `*_is_records_guide.json` is the richest record, containing:
 - Guide alignment hits (flanking-to-noncoding matches)
 - Circle evidence (tail-head junction read counts)
 
+### Element boundaries
+
+`is_element.start` (equal to `end`) is the insertion point on the sample's
+reference: the element sits after reference base `start` (1-based, the
+Sniffles VCF POS). An IS110 element inserts without a target duplication but shares a
+2 bp core with the target, so it can be placed k bases to either side with the
+same sequence. Records follow ISfinder and put the shared bases at the
+element's **5' end** (in the element's own direction, `orientation`).
+`boundary_convention` says which placement a record uses:
+
+| value | meaning |
+|---|---|
+| `is110_core_5prime` | IS110 record (ISfinder family IS110, or an IS110 transposase domain without a hit), moved by `end_repeat_shift` reference bases so the core is at the 5' end |
+| `as_called` | other families: the shared bases are the target duplication and stay where they were called |
+
+Cross_reference_IS reports the rightmost placement in the element's direction,
+which puts the core at the **3' end**. `scripts/convert_core_convention.py`
+moves element intervals (0-based, half-open, in the genome that holds the
+element) from one convention to the other using that genome's sequence.
+
 ### Circle evidence flags
 
 `circle_evidence.tandem_confounded` is True when the record's sequence also

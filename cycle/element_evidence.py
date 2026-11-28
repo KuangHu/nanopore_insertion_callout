@@ -33,7 +33,10 @@ records are moved to the placement that puts the shared bases at the
 element's 5' end, as ISfinder entries store them. Other families are left
 alone: there the shared bases are the target duplication;
 ``end_repeat_shift`` gives the move in reference bases (negative: towards the
-reference start). Coordinates inside the record (ORFs, non-coding regions,
+reference start), and ``boundary_convention`` names the placement used:
+"is110_core_5prime" for IS110 records, "as_called" for the rest. Cross_reference_IS
+puts the core at the 3' end instead; scripts/convert_core_convention.py converts
+coordinates between the two. Coordinates inside the record (ORFs, non-coding regions,
 the ISfinder hit) move with it.
 
 ``evidence`` stays "tail_head_reads" when the record has them; otherwise it
@@ -246,6 +249,7 @@ def annotate_sample(json_path: Path, db: Path, hmm: Path, threads: int = 1) -> P
         record["orientation_status"] = status
         is110 = (hit or {}).get("family") == "IS110" or (not hit and names & IS110_DOMAINS)
         record["end_repeat_shift"] = _place_end_repeat(record) if is110 and record["is_element"]["sequence"] else 0
+        record["boundary_convention"] = "is110_core_5prime" if is110 else "as_called"
         # The ORF annotator names non-coding regions by the record's own direction; give the
         # element's ends as well. A minus element starts at the record's end.
         swap = {"5_prime": "3_prime", "3_prime": "5_prime"}

@@ -94,6 +94,7 @@ class EndRepeatPlacement(ElementEvidence):
         out = self.placed("ACGTACGTCT" * 5, "GGGTTACT", "AAACCC", "+")
         self.assertEqual(out["end_repeat_shift"], -2)
         self.assertEqual(out["is_element"]["sequence"], "CT" + ("ACGTACGTCT" * 5)[:-2])
+        self.assertEqual(out["boundary_convention"], "is110_core_5prime")
         self.assertEqual(out["flanking_upstream"]["sequence"], "GGGTTA")
         self.assertEqual(out["flanking_downstream"]["sequence"], "CTAAACCC")
         self.assertEqual((out["is_element"]["start"], out["insertion_site"]["pos_5p"]), (998, 998))
@@ -113,6 +114,7 @@ class EndRepeatPlacement(ElementEvidence):
         # outside IS110 the shared bases are the target duplication, not a core
         out = self.placed("ACGTACGTCT" * 5, "GGGTTACT", "AAACCC", "+", entry="IS3_IS3_IS51")
         self.assertEqual(out["end_repeat_shift"], 0)
+        self.assertEqual(out["boundary_convention"], "as_called")
         self.assertEqual(out["is_element"]["sequence"], "ACGTACGTCT" * 5)
 
     def test_repeat_already_at_the_5_prime_end_stays(self):
