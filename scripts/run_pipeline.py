@@ -4,7 +4,7 @@
 Chains up to 9 stages:
   1. download  — fetch FASTQs via kingfisher
   2. resolve   — download one reference genome per organism via NCBI datasets
-  3. index     — build minimap2 .mmi indices
+  3. index     — build minimap2 .mmi indices, one per reference and preset
   4. align     — minimap2 + samtools sort -> sorted BAM + .bai
   5. is_ref    — build IS element reference FASTA (for tldr only)
   6. tldr      — run tldr per sample (IS detection via reference library)
@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pandas as pd
 from cycle.download_manager import SRADownloader
 from cycle.preprocess import ReferenceGenomeResolver, Aligner, ISReferenceBuilder, TldrRunner, SnifflesRunner
+from cycle.preprocess.aligner import pick_preset
 from cycle.preprocess.config import (
     DEFAULT_ALIGNMENT_DIR,
     DEFAULT_FASTQ_DIR,
@@ -114,8 +115,9 @@ def parse_args():
         help=f"Directory for Sniffles2 output. Default: derived from --outdir or {DEFAULT_SNIFFLES_OUTPUT_DIR}",
     )
     parser.add_argument(
-        "--preset", default=DEFAULT_MINIMAP2_PRESET,
-        help=f"minimap2 preset. Default: {DEFAULT_MINIMAP2_PRESET}",
+        "--preset", default=None,
+        help=f"minimap2 preset for every sample. Default: chosen per sample, {DEFAULT_MINIMAP2_PRESET} for "
+             "nanopore, map-hifi or map-pb for PacBio by read quality",
     )
     parser.add_argument(
         "--sort-memory", default=DEFAULT_SORT_MEMORY,
@@ -429,9 +431,17 @@ def main():
         if not ref_map:
             ref_map = discover_existing_refs(Path(args.ref_dir))
 
-        for org, info in ref_map.items():
-            if info:
-                aligner.index(info["fasta"])
+        # One index per reference and preset; PacBio presets need the reads, so runs not yet
+        # downloaded get their index in the align step
+        fastq_dir = Path(args.fastq_dir)
+        for _, row in metadata.iterrows():
+            info = ref_map.get(row.get("organism", ""))
+            try:
+                fq = find_fastq(fastq_dir, row["srr_accession"]) if info and fastq_dir.is_dir() else None
+            except ValueError:
+                fq = None  # reported by the align step
+            if fq:
+                aligner.index(info["fasta"], args.preset or pick_preset(fq, row.get("platform", "")))
 
     # ── Stage 4: Align reads ─────────────────────────────────────────
     if "align" in steps:
@@ -484,6 +494,7 @@ def main():
                 "sample_id": sid,
                 "fastq": fq,
                 "reference_fasta": ref_info["fasta"],
+                "platform": row.get("platform", ""),
             })
 
         if skipped:

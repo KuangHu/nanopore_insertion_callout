@@ -1,6 +1,10 @@
-"""Align nanopore reads to reference genomes with minimap2 → sorted BAM."""
+"""Align long reads to reference genomes with minimap2 → sorted BAM."""
 
+import gzip
 import logging
+import math
+import os
+import statistics
 import shutil
 import subprocess
 from pathlib import Path
@@ -18,13 +22,41 @@ from .config import (
 
 logger = logging.getLogger(__name__)
 
+# PacBio reads whose median per-read accuracy reaches Q20 are HiFi; below that, or without base
+# qualities (one value repeated over the whole read), they are CLR.
+HIFI_MIN_READ_Q = 20
+PRESET_READS = 20000
+
+
+def pick_preset(fastq: Path, platform: str) -> str:
+    """minimap2 preset for one run: map-ont for nanopore, map-hifi or map-pb for PacBio by read quality."""
+    if platform != "PACBIO_SMRT":
+        return DEFAULT_MINIMAP2_PRESET
+    accuracies, flat = [], 0
+    opener = gzip.open if str(fastq).endswith(".gz") else open
+    with opener(fastq, "rt") as handle:
+        for n, line in enumerate(handle):
+            if n % 4 == 3:
+                quality = line.rstrip("\n")
+                if len(set(quality)) <= 1:
+                    flat += 1
+                error = sum(10 ** (-(ord(c) - 33) / 10) for c in quality) / max(len(quality), 1)
+                accuracies.append(-10 * math.log10(max(error, 1e-6)))
+                if len(accuracies) >= PRESET_READS:
+                    break
+    if not accuracies or flat > len(accuracies) / 2 or statistics.median(accuracies) < HIFI_MIN_READ_Q:
+        return "map-pb"
+    return "map-hifi"
+
 
 class Aligner:
     """Minimap2 index + align → sorted BAM + .bai.
 
-    One ``.mmi`` index is built per reference genome (shared across samples
-    of the same organism).  Alignment pipes minimap2 directly into
-    ``samtools sort`` with no intermediate SAM on disk.
+    One ``.mmi`` index is built per reference genome and preset (shared across
+    samples of the same organism), since an index keeps the k-mer settings of
+    the preset it was built with. With no preset given, each sample gets one
+    from its platform and read quality (``pick_preset``). Alignment pipes
+    minimap2 directly into ``samtools sort`` with no intermediate SAM on disk.
     """
 
     # Default per-sample alignment timeout in seconds (2 hours)
@@ -33,7 +65,7 @@ class Aligner:
     def __init__(
         self,
         output_dir: str = DEFAULT_ALIGNMENT_DIR,
-        preset: str = DEFAULT_MINIMAP2_PRESET,
+        preset: Optional[str] = None,
         threads: int = DEFAULT_THREADS,
         sort_memory: str = DEFAULT_SORT_MEMORY,
         timeout: int = DEFAULT_TIMEOUT,
@@ -53,32 +85,37 @@ class Aligner:
     # Public API
     # ------------------------------------------------------------------
 
-    def index(self, fasta: Path) -> Optional[Path]:
-        """Build a minimap2 ``.mmi`` index for a reference FASTA.
+    def index(self, fasta: Path, preset: str) -> Optional[Path]:
+        """Build the minimap2 index of a reference FASTA for one preset, ``<fasta stem>.<preset>.mmi``.
 
-        Skips if the index already exists. Returns the path to the ``.mmi``
-        file, or None on failure.
+        Skips if the index already exists. The index is written under a temporary name and
+        renamed, so a half-written index is never used. Returns its path, or None on failure.
         """
         fasta = Path(fasta)
-        mmi = fasta.with_suffix(".mmi")
+        mmi = fasta.with_suffix(f".{preset}.mmi")
 
         if mmi.exists():
             logger.info(f"Index exists: {mmi}")
             return mmi
 
+        pending = mmi.with_name(f".{mmi.name}.{os.getpid()}.pending")
         cmd = [
             "minimap2",
-            "-x", self.preset,
+            "-x", preset,
             "-t", str(self.threads),
-            "-d", str(mmi),
+            "-d", str(pending),
             str(fasta),
         ]
-        logger.info(f"Indexing {fasta.name}")
+        logger.info(f"Indexing {fasta.name} for {preset}")
         ret = subprocess.run(cmd, capture_output=True, text=True)
         if ret.returncode != 0:
             logger.error(f"minimap2 index failed: {ret.stderr.strip()}")
+            pending.unlink(missing_ok=True)
             return None
-
+        if not pending.exists():
+            logger.error(f"minimap2 left no index for {fasta.name}")
+            return None
+        pending.replace(mmi)
         logger.info(f"  → {mmi}")
         return mmi
 
@@ -87,13 +124,16 @@ class Aligner:
         fastq: Path,
         reference: Path,
         sample_id: Optional[str] = None,
+        preset: Optional[str] = None,
     ) -> Optional[Path]:
         """Align reads to a reference and produce a sorted BAM + index.
 
         Args:
             fastq: Path to input FASTQ (or .fastq.gz).
-            reference: Path to reference FASTA or ``.mmi`` index.
+            reference: Path to reference FASTA.
             sample_id: Used for output filename. Defaults to FASTQ stem.
+            preset: minimap2 preset for this sample; defaults to the aligner's, then map-ont.
+                The index ``<fasta stem>.<preset>.mmi`` is used when it exists.
 
         Returns:
             Path to the sorted BAM, or None on failure.
@@ -106,8 +146,8 @@ class Aligner:
         bam = self.output_dir / f"{sample_id}.sorted.bam"
         pending_bam = bam.with_name(f".{bam.stem}.pending.bam")
 
-        # Prefer .mmi if available
-        mmi = reference.with_suffix(".mmi")
+        preset = preset or self.preset or DEFAULT_MINIMAP2_PRESET
+        mmi = reference.with_suffix(f".{preset}.mmi")
         ref = mmi if mmi.exists() else reference
 
         # Reuse a BAM only when its minimap2 command line names this reference and preset
@@ -117,7 +157,7 @@ class Aligner:
                     commands = [pg.get("CL", "") for pg in handle.header.to_dict().get("PG", []) if pg.get("PN") == "minimap2"]
             except (OSError, ValueError):
                 commands = []
-            if any(str(ref) in cl.split() and f"-x {self.preset}" in cl for cl in commands):
+            if any(str(ref) in cl.split() and f"-x {preset}" in cl for cl in commands):
                 logger.info(f"BAM exists: {bam}")
                 return bam
             logger.info(f"BAM {bam} was made with another reference or preset; realigning")
@@ -128,7 +168,7 @@ class Aligner:
             "minimap2",
             "-a",
             "--MD",
-            "-x", self.preset,
+            "-x", preset,
             "-t", str(self.threads),
             str(ref),
             str(fastq),
@@ -141,7 +181,7 @@ class Aligner:
             "-",
         ]
 
-        logger.info(f"Aligning {fastq.name} → {bam.name}")
+        logger.info(f"Aligning {fastq.name} → {bam.name} with {preset}")
         try:
             run_checked_pipe(mm2_cmd, sort_cmd, timeout=self.timeout)
             subprocess.run(
@@ -170,7 +210,7 @@ class Aligner:
 
         Args:
             sample_map: List of dicts with keys
-                {sample_id, fastq, reference_fasta}.
+                {sample_id, fastq, reference_fasta} and optionally platform.
 
         Returns:
             List of dicts with added ``bam`` key (Path or None).
@@ -185,10 +225,10 @@ class Aligner:
                 f"[{i}/{len(sample_map)}] {sid}"
             )
 
-            # Ensure index exists
-            self.index(ref)
+            preset = self.preset or pick_preset(fastq, entry.get("platform", ""))
+            self.index(ref, preset)
 
-            bam = self.align(fastq, ref, sample_id=sid)
+            bam = self.align(fastq, ref, sample_id=sid, preset=preset)
             results.append({**entry, "bam": bam})
 
         ok = sum(1 for r in results if r["bam"])
