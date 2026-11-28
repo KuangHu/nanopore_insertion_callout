@@ -29,6 +29,8 @@ from .config import (
     DEFAULT_MIN_READS_FOR_ASSEMBLY,
     COPY_MIN_COVERAGE,
     COPY_MIN_IDENTITY,
+    LOCAL_COPY_MIN_COVERAGE,
+    LOCAL_COPY_WINDOW,
     MAX_END_CLIP,
     MAX_FALLBACK_READS,
     MAX_OVERHANG,
@@ -633,6 +635,62 @@ class ISFormatter:
                 }
                 record["evidence"] = "tail_head_reads" if shared["n_tail_head_reads"] > 0 else "none"
 
+    def _flag_tandem(self, records: list[dict], reference: Optional[Path], work_dir: Path) -> None:
+        """Mark records that sit beside their own copy in the reference.
+
+        Reads across the junction of a tandem duplication, or through a tandem
+        array, look like tail-head and multi-pass circle reads. A record whose
+        sequence covers at least LOCAL_COPY_MIN_COVERAGE of itself on the
+        reference within LOCAL_COPY_WINDOW bp of its site (minimap2 asm20) gets
+        ``tandem_confounded`` True in its circle evidence, and so do the other
+        copies its counts are shared with. Counts are kept; the flag is None
+        when there is no reference or the alignment failed.
+        """
+        sequences = {r["is_id"]: r["is_element"]["sequence"] for r in records if r["is_element"]["sequence"]}
+        for record in records:
+            record["circle_evidence"]["tandem_confounded"] = None
+            record["circle_evidence"]["local_copy_fraction"] = None
+        if not sequences or not reference or not Path(reference).exists():
+            return
+        fasta = work_dir / "records_vs_reference.fa"
+        fasta.write_text("".join(f">{name}\n{seq}\n" for name, seq in sequences.items()))
+        try:
+            result = subprocess.run(
+                ["minimap2", "-c", "-x", "asm20", "-N", "50", "-p", "0.3", "-t", str(self.threads),
+                 str(reference), str(fasta)],
+                capture_output=True, text=True, timeout=self.assembly_timeout * 10,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("Local copy search timed out; tandem flag left unset")
+            return
+        if result.returncode != 0:
+            logger.warning(f"Local copy search failed; tandem flag left unset: {result.stderr[:200]}")
+            return
+        site = {r["is_id"]: (r["is_element"]["contig"], r["is_element"]["start"]) for r in records}
+        spans: dict[str, list[tuple[int, int]]] = {}
+        for line in result.stdout.splitlines():
+            f = line.split("\t")
+            contig, pos = site[f[0]]
+            if f[5] == contig and min(abs(int(f[7]) - pos), abs(int(f[8]) - pos)) <= LOCAL_COPY_WINDOW:
+                spans.setdefault(f[0], []).append((int(f[2]), int(f[3])))
+        confounded_groups = set()
+        for record in records:
+            name = record["is_id"]
+            if name not in sequences:
+                continue
+            covered, end = 0, 0
+            for start, stop in sorted(spans.get(name, [])):
+                covered += max(0, stop - max(start, end))
+                end = max(end, stop)
+            fraction = covered / len(sequences[name])
+            record["circle_evidence"]["local_copy_fraction"] = round(fraction, 3)
+            record["circle_evidence"]["tandem_confounded"] = fraction >= LOCAL_COPY_MIN_COVERAGE
+            if fraction >= LOCAL_COPY_MIN_COVERAGE:
+                confounded_groups.add(record["element_group"])
+        for record in records:
+            if record["element_group"] in confounded_groups:
+                record["circle_evidence"]["tandem_confounded"] = True
+
     def _format_record(
         self,
         is_info: dict,
@@ -711,6 +769,7 @@ class ISFormatter:
         circle_dir: Path,
         sample_id: str,
         platform: str = "OXFORD_NANOPORE",
+        reference: Optional[Path] = None,
     ) -> Optional[Path]:
         """Run IS formatting for one sample's circle detection output.
 
@@ -718,6 +777,7 @@ class ISFormatter:
             circle_dir: Path to the sample's circle output directory
                 (contains *_circle_summary.tsv and *.circle.sorted.bam).
             sample_id: Sample accession.
+            reference: the sample's reference FASTA, to flag records beside their own copy.
 
         Returns:
             Path to output directory containing JSON/TSV, or None on failure.
@@ -857,6 +917,7 @@ class ISFormatter:
             records.append(record)
 
         self._group_copies(records, assembly_dir, COPY_MIN_IDENTITY.get(platform, COPY_MIN_IDENTITY["OXFORD_NANOPORE"]))
+        self._flag_tandem(records, reference, assembly_dir)
 
         # 6. Write outputs
         if not records:
@@ -889,6 +950,7 @@ class ISFormatter:
         circle_results: dict[str, Optional[Path]],
         parallel: int = 1,
         platforms: Optional[dict[str, str]] = None,
+        references: Optional[dict[str, Path]] = None,
     ) -> dict[str, Optional[Path]]:
         """Run IS formatting for all samples.
 
@@ -925,6 +987,7 @@ class ISFormatter:
                         circle_dir=circle_dir,
                         sample_id=sample_id,
                         platform=(platforms or {}).get(sample_id, "OXFORD_NANOPORE"),
+                        reference=(references or {}).get(sample_id),
                     )
                     results[sample_id] = out
                 except Exception as exc:
@@ -951,6 +1014,7 @@ class ISFormatter:
                         require_th_reads=self.require_th_reads,
                         threads=self.threads,
                         platform=(platforms or {}).get(sample_id, "OXFORD_NANOPORE"),
+                        reference=(references or {}).get(sample_id),
                     )
                     futures[fut] = sample_id
 
@@ -989,6 +1053,7 @@ def _run_formatter_worker(
     require_th_reads: bool,
     threads: int,
     platform: str,
+    reference: Optional[Path] = None,
 ) -> Optional[Path]:
     """Standalone worker function for parallel IS formatting."""
     formatter = ISFormatter(
@@ -1004,6 +1069,7 @@ def _run_formatter_worker(
         circle_dir=circle_dir,
         sample_id=sample_id,
         platform=platform,
+        reference=reference,
     )
 
 
@@ -1021,6 +1087,7 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
         "tail_head_read_ids", "sequence_read_id", "n_element_reads",
         "flank_status", "n_copies", "element_group", "evidence_level", "n_th_clipped_reads",
         "n_multipass_reads", "multipass_read_ids", "support_read_ids",
+        "tandem_confounded", "local_copy_fraction",
     ]
 
     rows: list[dict] = []
@@ -1058,6 +1125,8 @@ def _write_tsv(path: Path, records: list[dict]) -> None:
             "n_multipass_reads": rec["circle_evidence"]["n_multipass_circle_reads"],
             "multipass_read_ids": ",".join(rec["circle_evidence"]["multipass_read_ids"]),
             "support_read_ids": ",".join(rec["support_read_ids"]),
+            "tandem_confounded": rec["circle_evidence"].get("tandem_confounded"),
+            "local_copy_fraction": rec["circle_evidence"].get("local_copy_fraction"),
         })
 
     with open(path, "w", newline="") as fh:

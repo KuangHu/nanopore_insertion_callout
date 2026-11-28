@@ -79,6 +79,15 @@ Each sample's `*_is_records_guide.json` is the richest record, containing:
 - Guide alignment hits (flanking-to-noncoding matches)
 - Circle evidence (tail-head junction read counts)
 
+### Circle evidence flags
+
+`circle_evidence.tandem_confounded` is True when the record's sequence also
+covers at least half of itself on the reference within 20 kb of the site (its
+own copy beside it: a tandem duplication or array). Junction and read-through
+reads of a tandem look like tail-head and multi-pass circle reads, so these
+counts are kept but cannot be read as circle evidence. `local_copy_fraction`
+gives the share; both are null when no reference was available.
+
 ## Cross-Batch Analysis Directories
 
 These live at the `IS_cycle/` root level. They can operate on one batch or

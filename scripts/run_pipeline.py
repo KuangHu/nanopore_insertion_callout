@@ -539,7 +539,7 @@ def main():
 
     # ── Build sample-level ref_map for stages 6+ ─────────────────────
     sample_refs: dict[str, Path] = {}
-    needs_sample_refs = steps & {"tldr", "sniffles", "circle"}
+    needs_sample_refs = steps & {"tldr", "sniffles", "circle", "format"}
     if needs_sample_refs:
         sample_refs = build_sample_ref_map(Path(args.align_dir))
         if not sample_refs:
@@ -685,6 +685,7 @@ def main():
             circle_results=circle_results,
             parallel=args.parallel,
             platforms=dict(zip(metadata["srr_accession"], metadata.get("platform", pd.Series(dtype=str)).fillna(""))),
+            references=sample_refs,
         )
 
         ok = sum(1 for v in format_results.values() if v)
