@@ -19,6 +19,8 @@ from .config import DEFAULT_ALIGNMENT_DIR
 
 logger = logging.getLogger(__name__)
 
+MERGE_DISTANCE = 10  # bp; insertion calls closer than this are one site
+
 
 class SnifflesRunner:
     """Run Sniffles2 once per sample to detect insertions.
@@ -166,6 +168,12 @@ class SnifflesRunner:
         # Remove entries that still have no usable sequence
         insertions = [ins for ins in insertions if ins["Sequence"]]
 
+        # Several calls at one site (reads disagreeing on the inserted length) are one insertion
+        n_called = len(insertions)
+        insertions = self._merge_nearby(insertions)
+        if len(insertions) < n_called:
+            logger.info(f"  {sample_id}: {n_called - len(insertions)} calls merged into a call within {MERGE_DISTANCE} bp")
+
         # Insertions of a sequence found elsewhere in the reference, which Sniffles does not call
         recovered = []
         if Path(bam).exists():
@@ -283,6 +291,23 @@ class SnifflesRunner:
             f"{n_low_entropy} low-entropy filtered, {len(insertions)} kept"
         )
         return insertions
+
+    @staticmethod
+    def _merge_nearby(insertions: list[dict]) -> list[dict]:
+        """Keep one call per site: calls on a contig whose starts chain within MERGE_DISTANCE bp
+        are one group, and the best-supported call of the group is kept (the first in VCF order
+        on a tie)."""
+        order = sorted(range(len(insertions)), key=lambda i: (insertions[i]["Chrom"], insertions[i]["Start"], i))
+        kept, group = [], []
+        for i in order + [None]:
+            ins = insertions[i] if i is not None else None
+            if group and (ins is None or ins["Chrom"] != insertions[group[-1]]["Chrom"]
+                          or ins["Start"] - insertions[group[-1]]["Start"] > MERGE_DISTANCE):
+                kept.append(max(group, key=lambda j: (insertions[j]["Support"], -j)))
+                group = []
+            if i is not None:
+                group.append(i)
+        return [insertions[i] for i in sorted(kept)]
 
     @staticmethod
     def _inserted_from_reads(

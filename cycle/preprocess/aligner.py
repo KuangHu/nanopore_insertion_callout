@@ -49,13 +49,56 @@ def pick_preset(fastq: Path, platform: str) -> str:
     return "map-hifi"
 
 
+def zmw_key(header: str) -> str:
+    """The ZMW a read came from: ``movie/zmw`` of a PacBio name, else the SRA spot (first word).
+
+    SRA keeps the subreads of one ZMW as the reads of one spot, all named ``<run>.<spot>``.
+    """
+    words = header[1:].split()
+    for word in words:
+        fields = word.split("/")
+        if len(fields) >= 3 and fields[0].startswith("m") and fields[1].isdigit():
+            return f"{fields[0]}/{fields[1]}"
+    return words[0] if words else ""
+
+
+def longest_per_zmw(fastq: Path, out: Path) -> tuple[int, int]:
+    """Write the longest read of each ZMW to ``out`` (plain FASTQ); returns (reads in, reads out).
+
+    CLR runs hold several subreads per ZMW, passes over one molecule, which pile up as
+    separate reads at one site and split one insertion into several calls. The subreads
+    of a ZMW are consecutive in the file.
+    """
+    opener = gzip.open if str(fastq).endswith(".gz") else open
+    n_in = n_out = 0
+    best, best_key = None, None
+    pending = out.with_name(f".{out.name}.pending")
+    with opener(fastq, "rt") as handle, open(pending, "w") as sink:
+        while True:
+            record = [handle.readline() for _ in range(4)]
+            key = zmw_key(record[0]) if record[0] else None
+            if key != best_key or not record[0]:
+                if best is not None:
+                    sink.writelines(best)
+                    n_out += 1
+                best, best_key = None, key
+            if not record[0]:
+                break
+            n_in += 1
+            if best is None or len(record[1]) > len(best[1]):
+                best = record
+    pending.replace(out)
+    return n_in, n_out
+
+
 class Aligner:
     """Minimap2 index + align → sorted BAM + .bai.
 
     One ``.mmi`` index is built per reference genome and preset (shared across
     samples of the same organism), since an index keeps the k-mer settings of
     the preset it was built with. With no preset given, each sample gets one
-    from its platform and read quality (``pick_preset``). Alignment pipes
+    from its platform and read quality (``pick_preset``). CLR runs (map-pb) are
+    aligned with the longest subread of each ZMW only (``longest_per_zmw``). Alignment pipes
     minimap2 directly into ``samtools sort`` with no intermediate SAM on disk.
     """
 
@@ -150,14 +193,14 @@ class Aligner:
         mmi = reference.with_suffix(f".{preset}.mmi")
         ref = mmi if mmi.exists() else reference
 
-        # Reuse a BAM only when its minimap2 command line names this reference and preset
+        # Reuse a BAM only when its minimap2 command line names this reference, preset and read file
         if bam.exists() and Path(str(bam) + ".bai").exists():
             try:
                 with pysam.AlignmentFile(str(bam), "rb", check_sq=False) as handle:
                     commands = [pg.get("CL", "") for pg in handle.header.to_dict().get("PG", []) if pg.get("PN") == "minimap2"]
             except (OSError, ValueError):
                 commands = []
-            if any(str(ref) in cl.split() and f"-x {preset}" in cl for cl in commands):
+            if any(str(ref) in cl.split() and f"-x {preset}" in cl and fastq.name in cl for cl in commands):
                 logger.info(f"BAM exists: {bam}")
                 return bam
             logger.info(f"BAM {bam} was made with another reference or preset; realigning")
@@ -228,7 +271,17 @@ class Aligner:
             preset = self.preset or pick_preset(fastq, entry.get("platform", ""))
             self.index(ref, preset)
 
-            bam = self.align(fastq, ref, sample_id=sid, preset=preset)
+            # CLR: one read per ZMW, the longest subread
+            reads = fastq
+            if preset == "map-pb":
+                reads = self.output_dir / f"{sid}.longest_subread.fastq"
+                n_in, n_out = longest_per_zmw(fastq, reads)
+                logger.info(f"{sid}: kept the longest subread of each ZMW, {n_out}/{n_in} reads")
+            try:
+                bam = self.align(reads, ref, sample_id=sid, preset=preset)
+            finally:
+                if reads != fastq:
+                    reads.unlink(missing_ok=True)
             results.append({**entry, "bam": bam})
 
         ok = sum(1 for r in results if r["bam"])
