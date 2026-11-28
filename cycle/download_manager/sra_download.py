@@ -15,6 +15,8 @@ from .config import (
     DEFAULT_OUTPUT_FORMAT,
     DEFAULT_DOWNLOAD_THREADS,
     DEFAULT_EXTRACTION_THREADS,
+    LONG_READ_CHECK,
+    MIN_LONG_READ,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,20 @@ class SRADownloader:
 
         if not shutil.which("kingfisher"):
             raise RuntimeError("kingfisher not found in PATH. Install kingfisher.")
+        self.short_read_runs: set[str] = set()
+
+    @staticmethod
+    def _longest_read(path: Path) -> int:
+        """Longest of the first LONG_READ_CHECK reads of a FASTQ."""
+        longest = 0
+        opener = gzip.open if path.suffix == ".gz" else open
+        with opener(path, "rt") as handle:
+            for n, line in enumerate(handle):
+                if n % 4 == 1:
+                    longest = max(longest, len(line.rstrip("\n")))
+                if n >= 4 * LONG_READ_CHECK:
+                    break
+        return longest
 
     def _build_cmd(self, accessions: list[str]) -> list[str]:
         """Build the kingfisher get command."""
@@ -95,6 +111,26 @@ class SRADownloader:
                         # The file stays for inspection; download_status.tsv marks the run failed
                         logger.error(f"Truncated or corrupt download for {srr}: {path.name}: {exc}")
                         return None
+            # A short-read run (in one file or as _1/_2 mates) is refused; long reads split over
+            # _1 and _2 are joined into one single-end file
+            short = [path.name for path in matches if self._longest_read(path) < MIN_LONG_READ]
+            if short:
+                logger.error(f"{srr}: no read of {MIN_LONG_READ} bp or more in {short}: short reads, not used")
+                self.short_read_runs.add(srr)
+                return None
+            mates = [self.output_dir / f"{srr}_{mate}.fastq.gz" for mate in (1, 2)]
+            if all(mate in matches for mate in mates):
+                joined = self.output_dir / f"{srr}.fastq.gz"
+                pending = self.output_dir / f".{srr}.fastq.gz.pending"
+                with open(pending, "wb") as out:
+                    for mate in mates:
+                        with open(mate, "rb") as handle:
+                            shutil.copyfileobj(handle, out)  # concatenated gzip members are one gzip file
+                pending.replace(joined)
+                for mate in mates:
+                    mate.unlink()
+                logger.info(f"  -> joined {[m.name for m in mates]} into {joined.name} as single-end reads")
+                return joined
             return matches[0]
 
         logger.warning(f"No output files found for {srr}")
@@ -138,7 +174,7 @@ class SRADownloader:
             if batch_size == 1:
                 result = self.download_one(batch[0])
                 paths.append(str(result) if result else "")
-                statuses.append("ok" if result else "failed")
+                statuses.append("ok" if result else "short_reads" if batch[0] in self.short_read_runs else "failed")
             else:
                 # Batch call — kingfisher handles multiple accessions
                 cmd = self._build_cmd(batch)

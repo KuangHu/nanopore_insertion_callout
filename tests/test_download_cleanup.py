@@ -16,7 +16,7 @@ class TestAria2Cleanup(unittest.TestCase):
             out = Path(tmp)
 
             def kingfisher(cmd, **kwargs):
-                (out / "SRR1.fastq.gz").write_bytes(gzip.compress(b"@r\nACGT\n+\nIIII\n"))
+                (out / "SRR1.fastq.gz").write_bytes(gzip.compress(f"@r\n{'A' * 1500}\n+\n{'I' * 1500}\n".encode()))
                 (out / "SRR1.fastq.gz.aria2").write_bytes(b"control")
                 return subprocess.CompletedProcess(cmd, 0, "", "")
 

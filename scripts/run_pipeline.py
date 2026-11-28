@@ -484,7 +484,12 @@ def main():
                 skipped += 1
                 continue
 
-            fq = find_fastq(fastq_dir, sid)
+            try:
+                fq = find_fastq(fastq_dir, sid)
+            except ValueError as exc:
+                logger.warning(f"{exc}, skipping")
+                skipped += 1
+                continue
             if not fq:
                 logger.warning(f"No FASTQ found for {sid}, skipping")
                 skipped += 1

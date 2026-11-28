@@ -14,6 +14,10 @@ def slugify(name: str) -> str:
 def find_fastq(fastq_dir: str | Path, sample_id: str) -> Path | None:
     """Find FASTQ file for a sample, trying common naming patterns."""
     fastq_dir = Path(fastq_dir)
+    # Mates the download step did not join (it joins long reads and refuses short ones) are not
+    # reduced to their first file
+    if (fastq_dir / f"{sample_id}_1.fastq.gz").is_file() and (fastq_dir / f"{sample_id}_2.fastq.gz").is_file():
+        raise ValueError(f"Paired FASTQ files for {sample_id} were not joined into one file")
     for pattern in (
         f"{sample_id}.fastq.gz",
         f"{sample_id}.fastq",

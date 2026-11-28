@@ -26,3 +26,8 @@ DEFAULT_DOWNLOAD_METHODS = ["ena-ftp", "aws-http", "prefetch"]
 DEFAULT_OUTPUT_FORMAT = "fastq.gz"
 DEFAULT_DOWNLOAD_THREADS = 8
 DEFAULT_EXTRACTION_THREADS = 8
+
+# A run none of whose first LONG_READ_CHECK reads reaches MIN_LONG_READ bp holds short reads
+# (some runs labelled nanopore or PacBio are Illumina reads), and is not used
+MIN_LONG_READ = 1000
+LONG_READ_CHECK = 20000
