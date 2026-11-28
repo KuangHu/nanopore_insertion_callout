@@ -76,5 +76,46 @@ class ElementEvidence(unittest.TestCase):
         self.assertEqual((out["orientation"], out["orientation_status"]), ("+", "two_elements"))
 
 
+class EndRepeatPlacement(ElementEvidence):
+    """Bases shared by the element's end and a flank go to the element's 5' end, as in ISfinder."""
+
+    def placed(self, element, up, down, hit_strand, orfs=None):
+        rec = record(element, orfs or [{"start": 5, "end": 40, "strand": hit_strand, "protein_sequence": "MKV*"}])
+        rec["is_element"].update(start=1000, end=1000)
+        rec["insertion_site"] = {"pos_5p": 1000, "pos_3p": 1000}
+        rec["flanking_upstream"] = {"sequence": up, "length": len(up)}
+        rec["flanking_downstream"] = {"sequence": down, "length": len(down)}
+        n = len(element)
+        sstart, send = (1, n) if hit_strand == "+" else (n, 1)
+        return self.run_on([rec], [f"0\tIS1_IS110_IS1111\t99\t{n}\t1\t{n}\t{sstart}\t{send}\t0\t90\t{n}"], [])[0]
+
+    def test_plus_element_ending_like_its_upstream_flank_moves_back(self):
+        # filled locus GGGTTACT | ACGTACGTCT | AAA; the CT can sit at the element's 5' end
+        out = self.placed("ACGTACGTCT" * 5, "GGGTTACT", "AAACCC", "+")
+        self.assertEqual(out["end_repeat_shift"], -2)
+        self.assertEqual(out["is_element"]["sequence"], "CT" + ("ACGTACGTCT" * 5)[:-2])
+        self.assertEqual(out["flanking_upstream"]["sequence"], "GGGTTA")
+        self.assertEqual(out["flanking_downstream"]["sequence"], "CTAAACCC")
+        self.assertEqual((out["is_element"]["start"], out["insertion_site"]["pos_5p"]), (998, 998))
+        self.assertEqual((out["orf_annotation"]["orfs"][0]["start"], out["orf_annotation"]["orfs"][0]["end"]), (7, 42))
+        self.assertEqual((out["isfinder_hit"]["query_start"], out["isfinder_hit"]["query_end"]), (1, 50))
+
+    def test_minus_element_starting_like_its_downstream_flank_moves_on(self):
+        out = self.placed("GAACGTACGT" * 5, "GGGTTT", "GACCC", "-")
+        self.assertEqual(out["end_repeat_shift"], 2)
+        self.assertEqual(out["is_element"]["sequence"], ("GAACGTACGT" * 5)[2:] + "GA")
+        self.assertEqual(out["flanking_upstream"]["sequence"], "GGGTTTGA")
+        self.assertEqual(out["flanking_downstream"]["sequence"], "CCC")
+        self.assertEqual(out["is_element"]["start"], 1002)
+        self.assertEqual((out["orf_annotation"]["orfs"][0]["start"], out["orf_annotation"]["orfs"][0]["end"]), (3, 38))
+
+    def test_repeat_already_at_the_5_prime_end_stays(self):
+        # plus element starting like its downstream flank: the shared bases are at its 5' end already
+        out = self.placed("CTACGTACGA" * 5, "GGGTTT", "CTAAAC", "+")
+        self.assertEqual(out["end_repeat_shift"], 0)
+        self.assertEqual(out["is_element"]["sequence"], "CTACGTACGA" * 5)
+        self.assertEqual(out["is_element"]["start"], 1000)
+
+
 if __name__ == "__main__":
     unittest.main()

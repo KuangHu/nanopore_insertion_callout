@@ -26,6 +26,14 @@ best transposase ORF lies outside the ISfinder hit: the record then holds
 another element beside the matched one and has no single orientation (the
 ISfinder strand is kept).
 
+An element whose end matches the flank beside it (the 2 bp core of IS110
+elements, which insert without a target duplication) has several placements
+with the same sequence. Records are moved to the placement that puts the
+shared bases at the element's 5' end, as ISfinder entries store them;
+``end_repeat_shift`` gives the move in reference bases (negative: towards the
+reference start). Coordinates inside the record (ORFs, non-coding regions,
+the ISfinder hit) move with it.
+
 ``evidence`` stays "tail_head_reads" when the record has them; otherwise it
 becomes "is_reference_hit" for an ISfinder hit, "transposase_domain" for a
 domain only, or stays "none".
@@ -44,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 MIN_HIT_COVERAGE = 0.5   # fraction of the record covered by the best ISfinder hit
 MAX_HIT_EVALUE = 1e-10
+MAX_END_REPEAT = 10      # longer runs shared with the flank stay where they were called
 
 
 def build_isfinder_db(fasta: Path, out_dir: Path, hmm: Path, threads: int = 1) -> Path:
@@ -138,6 +147,54 @@ def _transposase_domains(proteins: dict[str, str], hmm: Path, work: Path, thread
     return found
 
 
+def _place_end_repeat(record: dict) -> int:
+    """Move the element so bases it shares with a flank sit at its 5' end; returns the shift.
+
+    A plus element whose last k bases equal the last k bases of the upstream flank can start k
+    bases earlier with the same sequence; a minus element whose first k bases equal the first k of
+    the downstream flank can start k bases later. Both put the shared bases at the 5' end.
+    """
+    element = record["is_element"]["sequence"]
+    up = (record.get("flanking_upstream") or {}).get("sequence", "")
+    down = (record.get("flanking_downstream") or {}).get("sequence", "")
+    k = 0
+    if record["orientation"] == "+":
+        while k < min(len(up), len(element)) and up[-1 - k] == element[-1 - k]:
+            k += 1
+    elif record["orientation"] == "-":
+        while k < min(len(down), len(element)) and down[k] == element[k]:
+            k += 1
+    if not 0 < k <= MAX_END_REPEAT:
+        return 0
+    if record["orientation"] == "+":
+        shift, element, up, down = -k, up[-k:] + element[:-k], up[:-k], element[-k:] + down
+    else:
+        shift, element, up, down = k, element[k:] + down[:k], up + element[:k], down[k:]
+    record["is_element"]["sequence"] = element
+    for key in ("start", "end"):
+        record["is_element"][key] += shift
+    site = record.get("insertion_site") or {}
+    for key in ("pos_5p", "pos_3p"):
+        if key in site:
+            site[key] += shift
+    record["flanking_upstream"].update(sequence=up, length=len(up))
+    record["flanking_downstream"].update(sequence=down, length=len(down))
+
+    # 1-based positions in the record move the other way; spans reaching an end stay at that end
+    n = len(element)
+    def move(start, end):
+        return (1 if start == 1 else min(max(start - shift, 1), n), n if end == n else min(max(end - shift, 1), n))
+    annotation = record.get("orf_annotation") or {}
+    for span in annotation.get("orfs", []) + (annotation.get("noncoding_regions") or []):
+        span["start"], span["end"] = move(span["start"], span["end"])
+        if "length" in span:
+            span["length"] = span["end"] - span["start"] + 1
+    if record.get("isfinder_hit"):
+        record["isfinder_hit"]["query_start"], record["isfinder_hit"]["query_end"] = move(
+            record["isfinder_hit"]["query_start"], record["isfinder_hit"]["query_end"])
+    return shift
+
+
 def annotate_sample(json_path: Path, db: Path, hmm: Path, threads: int = 1) -> Path:
     """Add ISfinder hits, transposase domains and orientation to one annotated JSON, in place."""
     records = json.loads(json_path.read_text())
@@ -184,6 +241,7 @@ def annotate_sample(json_path: Path, db: Path, hmm: Path, threads: int = 1) -> P
         record["orientation_orf"] = by_orf
         record["orientation_isfinder"] = by_hit
         record["orientation_status"] = status
+        record["end_repeat_shift"] = _place_end_repeat(record) if record["is_element"]["sequence"] else 0
         # The ORF annotator names non-coding regions by the record's own direction; give the
         # element's ends as well. A minus element starts at the record's end.
         swap = {"5_prime": "3_prime", "3_prime": "5_prime"}
