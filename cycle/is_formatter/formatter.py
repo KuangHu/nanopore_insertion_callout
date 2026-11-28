@@ -640,8 +640,8 @@ class ISFormatter:
 
         Reads across the junction of a tandem duplication, or through a tandem
         array, look like tail-head and multi-pass circle reads. A record whose
-        sequence covers at least LOCAL_COPY_MIN_COVERAGE of itself on the
-        reference within LOCAL_COPY_WINDOW bp of its site (minimap2 asm20) gets
+        sequence covers at least LOCAL_COPY_MIN_COVERAGE of itself on reference
+        stretches that reach within LOCAL_COPY_WINDOW bp of its site (minimap2 asm20) gets
         ``tandem_confounded`` True in its circle evidence, and so do the other
         copies its counts are shared with. Counts are kept; the flag is None
         when there is no reference or the alignment failed.

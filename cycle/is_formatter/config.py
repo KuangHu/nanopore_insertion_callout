@@ -14,8 +14,9 @@ POLISH_PAD = 500                  # bases kept on each side of the element in th
 COPY_MIN_IDENTITY = {"OXFORD_NANOPORE": 0.93, "PACBIO_SMRT": 0.95}
 COPY_MIN_COVERAGE = 0.90          # ...over this fraction of both sequences
 MAX_OVERHANG = 50                 # unaligned bases allowed where a polishing read leaves the backbone
-# A record whose sequence also covers this share of the reference within LOCAL_COPY_WINDOW bp
-# of its site sits beside its own copy: a tandem duplication or array, whose junction and
-# read-through reads look like circle reads.
+# A record whose sequence covers this share of itself on reference stretches that reach within
+# LOCAL_COPY_WINDOW bp of its site sits beside its own copy: a tandem duplication or array, whose
+# junction and read-through reads look like circle reads. Copies further away are other
+# insertions of the element (on the benchmark, copies 3-20 kb away flagged 100 real insertions).
 LOCAL_COPY_MIN_COVERAGE = 0.5
-LOCAL_COPY_WINDOW = 20_000
+LOCAL_COPY_WINDOW = 100

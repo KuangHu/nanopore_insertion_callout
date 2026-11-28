@@ -102,8 +102,9 @@ element) from one convention to the other using that genome's sequence.
 ### Circle evidence flags
 
 `circle_evidence.tandem_confounded` is True when the record's sequence also
-covers at least half of itself on the reference within 20 kb of the site (its
-own copy beside it: a tandem duplication or array). Junction and read-through
+covers at least half of itself on reference stretches that reach within 100 bp
+of the site (its own copy beside it: a tandem duplication or array; copies of
+the element further away are other insertions and do not count). Junction and read-through
 reads of a tandem look like tail-head and multi-pass circle reads, so these
 counts are kept but cannot be read as circle evidence. `local_copy_fraction`
 gives the share; both are null when no reference was available.

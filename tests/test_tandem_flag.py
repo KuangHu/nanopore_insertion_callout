@@ -44,6 +44,10 @@ class TestTandemFlag(unittest.TestCase):
         flags = self.flag([record("far", UNIT, 29500 + 20000)])
         self.assertIs(flags["far"]["tandem_confounded"], False)
 
+    def test_copy_a_few_kb_away_is_another_insertion(self):
+        flags = self.flag([record("near", UNIT, 16000)])
+        self.assertIs(flags["near"]["tandem_confounded"], False)
+
     def test_copies_sharing_counts_are_all_flagged(self):
         flags = self.flag([record("dup", UNIT, 11000, "g"), record("copy", UNIT[:900] + OTHER[:100], 60000, "g")])
         self.assertIs(flags["copy"]["tandem_confounded"], True)
