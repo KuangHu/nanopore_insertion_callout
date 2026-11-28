@@ -69,6 +69,11 @@ class SRADownloader:
             logger.error(f"kingfisher failed for {srr}: {ret.stderr.strip()}")
             return None
 
+        # aria2 can leave its control file beside a finished download; the gzip test below
+        # decides whether the download itself is whole
+        for control in self.output_dir.glob(f"{srr}*.aria2"):
+            control.unlink()
+
         # Find output file(s)
         ext = self.output_format.replace(".", "*.")
         matches = sorted(self.output_dir.glob(f"{srr}*.{ext}"))
@@ -139,6 +144,8 @@ class SRADownloader:
                 cmd = self._build_cmd(batch)
                 ret = subprocess.run(cmd, capture_output=True, text=True)
                 for srr in batch:
+                    for control in self.output_dir.glob(f"{srr}*.aria2"):
+                        control.unlink()
                     matches = sorted(self.output_dir.glob(f"{srr}*"))
                     matches = [m for m in matches if m.is_file()]
                     if ret.returncode == 0 and matches:
