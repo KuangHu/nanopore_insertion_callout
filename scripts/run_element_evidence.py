@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cycle.element_evidence import annotate_sample, build_isfinder_db
+from cycle.provenance import write_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
+    write_provenance([args.input_dir], "element_evidence", vars(args))
     db = build_isfinder_db(Path(args.isfinder_fasta), Path(args.db_dir), Path(args.transposase_hmm), args.parallel)
     paths = sorted(Path(args.input_dir).glob("*/*_is_records_annotated.json"))
     if args.sample_list:

@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cycle.guide_finder import GuideFinder
+from cycle.provenance import write_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ def main() -> None:
     if not input_dir.is_dir():
         logger.error(f"Input directory not found: {input_dir}")
         sys.exit(1)
+    write_provenance([input_dir], "guide_finder", vars(args))
 
     sample_ids = None
     if args.sample_list:

@@ -3,6 +3,7 @@
 import logging
 import math
 import re
+import shlex
 import statistics
 import shutil
 import subprocess
@@ -83,48 +84,31 @@ class SnifflesRunner:
         table_path = Path(f"{output_prefix}.table.txt")
         vcf_path = Path(f"{output_prefix}.vcf")
 
-        if table_path.exists():
-            with open(table_path) as f:
-                line_count = sum(1 for _ in f)
-            if line_count > 1:
-                logger.info(f"Sniffles2 output exists for {sample_id} ({line_count - 1} insertions): {table_path}")
-                return table_path
-            else:
-                logger.info(f"Reprocessing {sample_id} — table exists but has no insertions")
-
         logger.info(f"Running Sniffles2 for {sample_id}: {bam.name}")
 
-        # Skip if already processed with actual variants
+        # Sniffles writes to a pending file, renamed only after a clean exit, so a VCF
+        # under the final name always comes from a finished run.
+        pending_vcf = sample_dir / f".{sample_id}.pending.vcf"
+        cmd = self.command(bam, pending_vcf, ref_fasta, min_size, min_support, disable_qc)
+
+        # Reuse a VCF only when Sniffles ran with the same options (its header keeps the command).
+        # The table is always remade from the VCF, so it follows this code version.
         skip_existing = False
         if vcf_path.exists():
+            variant_count, options = 0, None
             with open(vcf_path) as f:
-                variant_count = sum(1 for line in f if not line.startswith('#'))
-            if variant_count > 0:
+                for line in f:
+                    if line.startswith("##command="):
+                        options = self._options(shlex.split(line.split("=", 1)[1].strip().strip('"')))
+                    elif not line.startswith("#"):
+                        variant_count += 1
+            if variant_count > 0 and options == self._options(cmd):
                 logger.info(f"  {sample_id} - using existing VCF ({variant_count} variants)")
                 skip_existing = True
             else:
-                logger.info(f"  {sample_id} - reprocessing empty VCF")
+                logger.info(f"  {sample_id} - rerunning Sniffles (existing VCF empty or made with other options)")
 
         if not skip_existing:
-            # Sniffles writes to a pending file, renamed only after a clean exit, so a VCF
-            # under the final name always comes from a finished run.
-            pending_vcf = sample_dir / f".{sample_id}.pending.vcf"
-            cmd = [
-                "sniffles",
-                "--input", str(bam),
-                "--vcf", str(pending_vcf),
-                "--reference", str(ref_fasta),
-                "--threads", "1",
-                "--minsvlen", str(min_size),
-                "--minsupport", str(min_support),
-                "--output-rnames",
-                "--allow-overwrite",
-                # Sniffles 2.7 skips contigs shorter than 1 Mb (plasmids, small chromosomes) otherwise
-                "--all-contigs",
-            ]
-            if disable_qc:
-                cmd.append("--no-qc")
-
             try:
                 ret = subprocess.run(
                     cmd, capture_output=True, text=True, timeout=600,
@@ -291,6 +275,39 @@ class SnifflesRunner:
             f"{n_low_entropy} low-entropy filtered, {len(insertions)} kept"
         )
         return insertions
+
+    @staticmethod
+    def command(bam, vcf, ref_fasta, min_size: int, min_support: int, disable_qc: bool) -> list[str]:
+        """The Sniffles command line for one sample."""
+        cmd = [
+            "sniffles",
+            "--input", str(bam),
+            "--vcf", str(vcf),
+            "--reference", str(ref_fasta),
+            "--threads", "1",
+            "--minsvlen", str(min_size),
+            "--minsupport", str(min_support),
+            "--output-rnames",
+            "--allow-overwrite",
+            # Sniffles 2.7 skips contigs shorter than 1 Mb (plasmids, small chromosomes) otherwise
+            "--all-contigs",
+        ]
+        if disable_qc:
+            cmd.append("--no-qc")
+        return cmd
+
+    @staticmethod
+    def _options(cmd: list[str]) -> tuple[str, ...]:
+        """A Sniffles command line without the program and the per-sample paths."""
+        kept, skip = [], False
+        for token in cmd[1:]:
+            if skip:
+                skip = False
+            elif token in ("--input", "--vcf", "--reference"):
+                skip = True
+            else:
+                kept.append(token)
+        return tuple(kept)
 
     @staticmethod
     def _merge_nearby(insertions: list[dict]) -> list[dict]:

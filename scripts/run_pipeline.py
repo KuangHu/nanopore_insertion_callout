@@ -51,6 +51,7 @@ from cycle.is_formatter.config import (
     DEFAULT_FLANK_SIZE,
     DEFAULT_FORMATTER_OUTPUT_DIR,
 )
+from cycle.provenance import write_provenance
 from cycle.utils import find_fastq
 
 ALL_STEPS = ["download", "resolve", "index", "align", "is_ref", "tldr", "sniffles", "circle", "format"]
@@ -365,6 +366,13 @@ def main():
 
     fastq_dir = Path(args.fastq_dir)
     steps = set(args.steps)
+    step_dirs = {"download": args.fastq_dir, "resolve": args.ref_dir, "index": args.ref_dir,
+                 "align": args.align_dir, "is_ref": args.is_dir, "tldr": args.tldr_dir,
+                 "sniffles": args.sniffles_dir, "circle": args.circle_dir, "format": args.formatter_dir}
+    extra = {}
+    if "sniffles" in steps:
+        extra["sniffles_command"] = " ".join(SnifflesRunner.command("<bam>", "<vcf>", "<reference>", 500, 3, False))
+    write_provenance(sorted({step_dirs[s] for s in steps}), "run_pipeline", vars(args), extra)
     tldr_results: dict[str, Path | None] = {}
     circle_results: dict[str, Path | None] = {}
 

@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from cycle.provenance import write_provenance
 from cycle.utils import find_fastq
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ def main():
     parser.add_argument("--threads", type=int, default=8)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
+    write_provenance([args.output_dir], "partial_circle", vars(args))
     failures = run_batch(**vars(args))
     if failures:
         logger.error("Partial circle incomplete: %d failed samples", len(failures))
