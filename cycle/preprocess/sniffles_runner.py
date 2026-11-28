@@ -2,6 +2,8 @@
 
 import logging
 import math
+import re
+import statistics
 import shutil
 import subprocess
 import uuid
@@ -163,6 +165,16 @@ class SnifflesRunner:
 
         # Remove entries that still have no usable sequence
         insertions = [ins for ins in insertions if ins["Sequence"]]
+
+        # Insertions of a sequence found elsewhere in the reference, which Sniffles does not call
+        recovered = []
+        if Path(bam).exists():
+            recovered = self._split_read_insertions(bam, insertions, min_size, max_size, min_support, sample_id)
+        else:
+            logger.warning(f"  {sample_id}: no BAM at {bam}, split reads not searched")
+        if recovered:
+            logger.info(f"  {sample_id}: {len(recovered)} insertions from split reads with the inserted part elsewhere")
+        insertions += recovered
 
         # The supporting reads stay in the table: they tie reads to this locus downstream
         for ins in insertions:
@@ -335,6 +347,92 @@ class SnifflesRunner:
         if not candidates:
             return None
         return min(candidates, key=lambda seq: abs(len(seq) - svlen))
+
+    @staticmethod
+    def _split_read_insertions(
+        bam_path: Path, called: list[dict], min_size: int, max_size: int, min_reads: int, sample_id: str,
+        join: int = 50, away: int = 2000, cluster: int = 30, near: int = 200, min_entropy: float = 1.5,
+    ) -> list[dict]:
+        """Insertions whose reads align the inserted part to another copy in the reference.
+
+        A read across such an insertion aligns in three parts, in read order: the left flank,
+        the inserted part on its other location (one or more pieces, at least *away* bp from the
+        site), and the right flank, which meets the left flank on the reference within *join* bp
+        on the same strand. Sniffles reports these reads as breakends at most, so an element
+        inserted beside a resident copy of itself is missed. The read bases between the flanks
+        are the insertion; at least half of them must sit on the other location. Sites within
+        *cluster* bp are one insertion; one with at least *min_reads* reads and no call within
+        *near* bp is returned in the format of ``_parse_vcf``, with the bases of the read whose
+        inserted length is the median.
+        """
+        complement = str.maketrans("ACGTNacgtn", "TGCANtgcan")
+
+        def piece(contig, start, reverse, cigar):
+            lead = cigar[0][1] if cigar[0][0] in (4, 5) else 0
+            aligned = sum(n for op, n in cigar if op in (0, 1, 7, 8))
+            total = sum(n for op, n in cigar if op in (0, 1, 4, 5, 7, 8))
+            ref_len = sum(n for op, n in cigar if op in (0, 2, 3, 7, 8))
+            q0 = total - lead - aligned if reverse else lead
+            return contig, reverse, q0, q0 + aligned, start, start + ref_len
+
+        def cigar_ops(text):
+            ops = re.findall(r"(\d+)([MIDNSHP=X])", text)
+            return [("MIDNSHP=X".index(op), int(n)) for n, op in ops]
+
+        sites: dict[str, list] = {}
+        with pysam.AlignmentFile(str(bam_path), "rb") as bam:
+            for read in bam.fetch():
+                if read.is_secondary or read.is_supplementary or not read.query_sequence or not read.has_tag("SA"):
+                    continue
+                pieces = [piece(read.reference_name, read.reference_start, read.is_reverse, read.cigartuples)]
+                for entry in read.get_tag("SA").rstrip(";").split(";"):
+                    contig, pos, strand, cigar = entry.split(",")[:4]
+                    pieces.append(piece(contig, int(pos) - 1, strand == "-", cigar_ops(cigar)))
+                pieces.sort(key=lambda x: x[2])
+                sequence = read.query_sequence.translate(complement)[::-1] if read.is_reverse else read.query_sequence
+                for i, left in enumerate(pieces):
+                    for j in range(i + 2, len(pieces)):
+                        right = pieces[j]
+                        if right[0] != left[0] or right[1] != left[1]:
+                            continue
+                        # Along the read a reverse-strand alignment runs towards the reference start
+                        site, other = (left[4], right[5]) if left[1] else (left[5], right[4])
+                        if abs(other - site) > join:
+                            continue
+                        gap = right[2] - left[3]
+                        elsewhere = [x for x in pieces[i + 1:j]
+                                     if x[0] != left[0] or min(abs(x[4] - site), abs(x[5] - site)) > away]
+                        if min_size <= gap <= max_size and sum(x[3] - x[2] for x in elsewhere) * 2 >= gap:
+                            inserted = sequence[left[3]:right[2]]
+                            if left[1]:
+                                inserted = inserted.translate(complement)[::-1]
+                            sites.setdefault(left[0], []).append((site, read.query_name, inserted))
+                        break
+
+        recovered = []
+        for contig, items in sites.items():
+            items.sort()
+            groups = [[items[0]]]
+            for item in items[1:]:
+                if item[0] - groups[-1][-1][0] <= cluster:
+                    groups[-1].append(item)
+                else:
+                    groups.append([item])
+            for group in groups:
+                reads = sorted({x[1] for x in group})
+                pos = int(statistics.median(x[0] for x in group))
+                if len(reads) < min_reads or any(c["Chrom"] == contig and abs(c["Start"] - pos) <= near for c in called):
+                    continue
+                length = statistics.median(len(x[2]) for x in group)
+                inserted = min(group, key=lambda x: abs(len(x[2]) - length))[2]
+                if SnifflesRunner._seq_entropy(inserted) < min_entropy:
+                    continue
+                recovered.append({
+                    "UUID": str(uuid.uuid4()), "Chrom": contig, "Start": pos, "End": pos, "Length": len(inserted),
+                    "Sequence": inserted, "Support": len(reads), "Family": "split_reads",
+                    "Subfamily": f"{sample_id}_{contig}_{pos}", "Rnames": reads,
+                })
+        return recovered
 
     def _write_table(self, insertions: list[dict], output_path: Path):
         """Write insertion table in tldr-compatible format."""
