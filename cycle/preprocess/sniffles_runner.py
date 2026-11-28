@@ -115,6 +115,8 @@ class SnifflesRunner:
                 "--minsupport", str(min_support),
                 "--output-rnames",
                 "--allow-overwrite",
+                # Sniffles 2.7 skips contigs shorter than 1 Mb (plasmids, small chromosomes) otherwise
+                "--all-contigs",
             ]
             if disable_qc:
                 cmd.append("--no-qc")
