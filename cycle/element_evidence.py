@@ -26,10 +26,12 @@ best transposase ORF lies outside the ISfinder hit: the record then holds
 another element beside the matched one and has no single orientation (the
 ISfinder strand is kept).
 
-An element whose end matches the flank beside it (the 2 bp core of IS110
-elements, which insert without a target duplication) has several placements
-with the same sequence. Records are moved to the placement that puts the
-shared bases at the element's 5' end, as ISfinder entries store them;
+An IS110 element (ISfinder family IS110, or an IS110 transposase domain
+without a hit) inserts without a target duplication but shares a 2 bp core
+with the target, so it has several placements with the same sequence. Such
+records are moved to the placement that puts the shared bases at the
+element's 5' end, as ISfinder entries store them. Other families are left
+alone: there the shared bases are the target duplication;
 ``end_repeat_shift`` gives the move in reference bases (negative: towards the
 reference start). Coordinates inside the record (ORFs, non-coding regions,
 the ISfinder hit) move with it.
@@ -53,6 +55,7 @@ logger = logging.getLogger(__name__)
 MIN_HIT_COVERAGE = 0.5   # fraction of the record covered by the best ISfinder hit
 MAX_HIT_EVALUE = 1e-10
 MAX_END_REPEAT = 10      # longer runs shared with the flank stay where they were called
+IS110_DOMAINS = {"DEDD_Tnp_IS110", "Transposase_20"}
 
 
 def build_isfinder_db(fasta: Path, out_dir: Path, hmm: Path, threads: int = 1) -> Path:
@@ -241,7 +244,8 @@ def annotate_sample(json_path: Path, db: Path, hmm: Path, threads: int = 1) -> P
         record["orientation_orf"] = by_orf
         record["orientation_isfinder"] = by_hit
         record["orientation_status"] = status
-        record["end_repeat_shift"] = _place_end_repeat(record) if record["is_element"]["sequence"] else 0
+        is110 = (hit or {}).get("family") == "IS110" or (not hit and names & IS110_DOMAINS)
+        record["end_repeat_shift"] = _place_end_repeat(record) if is110 and record["is_element"]["sequence"] else 0
         # The ORF annotator names non-coding regions by the record's own direction; give the
         # element's ends as well. A minus element starts at the record's end.
         swap = {"5_prime": "3_prime", "3_prime": "5_prime"}

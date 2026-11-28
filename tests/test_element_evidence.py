@@ -79,7 +79,7 @@ class ElementEvidence(unittest.TestCase):
 class EndRepeatPlacement(ElementEvidence):
     """Bases shared by the element's end and a flank go to the element's 5' end, as in ISfinder."""
 
-    def placed(self, element, up, down, hit_strand, orfs=None):
+    def placed(self, element, up, down, hit_strand, orfs=None, entry="IS1_IS110_IS1111"):
         rec = record(element, orfs or [{"start": 5, "end": 40, "strand": hit_strand, "protein_sequence": "MKV*"}])
         rec["is_element"].update(start=1000, end=1000)
         rec["insertion_site"] = {"pos_5p": 1000, "pos_3p": 1000}
@@ -87,7 +87,7 @@ class EndRepeatPlacement(ElementEvidence):
         rec["flanking_downstream"] = {"sequence": down, "length": len(down)}
         n = len(element)
         sstart, send = (1, n) if hit_strand == "+" else (n, 1)
-        return self.run_on([rec], [f"0\tIS1_IS110_IS1111\t99\t{n}\t1\t{n}\t{sstart}\t{send}\t0\t90\t{n}"], [])[0]
+        return self.run_on([rec], [f"0\t{entry}\t99\t{n}\t1\t{n}\t{sstart}\t{send}\t0\t90\t{n}"], [])[0]
 
     def test_plus_element_ending_like_its_upstream_flank_moves_back(self):
         # filled locus GGGTTACT | ACGTACGTCT | AAA; the CT can sit at the element's 5' end
@@ -108,6 +108,12 @@ class EndRepeatPlacement(ElementEvidence):
         self.assertEqual(out["flanking_downstream"]["sequence"], "CCC")
         self.assertEqual(out["is_element"]["start"], 1002)
         self.assertEqual((out["orf_annotation"]["orfs"][0]["start"], out["orf_annotation"]["orfs"][0]["end"]), (3, 38))
+
+    def test_other_families_keep_their_placement(self):
+        # outside IS110 the shared bases are the target duplication, not a core
+        out = self.placed("ACGTACGTCT" * 5, "GGGTTACT", "AAACCC", "+", entry="IS3_IS3_IS51")
+        self.assertEqual(out["end_repeat_shift"], 0)
+        self.assertEqual(out["is_element"]["sequence"], "ACGTACGTCT" * 5)
 
     def test_repeat_already_at_the_5_prime_end_stays(self):
         # plus element starting like its downstream flank: the shared bases are at its 5' end already
